@@ -9,6 +9,7 @@ import { DashboardShell } from './screens/DashboardShell'
 import { CategoriesScreen } from './screens/CategoriesScreen'
 import { CompaniesScreen } from './screens/CompaniesScreen'
 import { DocumentSettingsScreen } from './screens/DocumentSettingsScreen'
+import { ProductsScreen } from './screens/ProductsScreen'
 import { EmptyBusinessesScreen } from './screens/EmptyBusinessesScreen'
 import { FirebaseSetupScreen } from './screens/FirebaseSetupScreen'
 import { LoadingScreen } from './screens/LoadingScreen'
@@ -35,6 +36,7 @@ export default function App() {
 
   if (page === 'companies') return <CompaniesScreen onNavigate={setPage} />
   if (page === 'categories') return <CategoriesScreen onNavigate={setPage} />
+  if (page === 'products') return <ProductsScreen onNavigate={setPage} />
   if (page === 'documentSettings') return <DocumentSettingsScreen onNavigate={setPage} />
 
   return <DashboardShell onNavigate={setPage} />

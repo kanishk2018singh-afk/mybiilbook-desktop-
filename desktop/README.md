@@ -11,8 +11,9 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - Electron security defaults (`contextIsolation`, no Node integration, narrow preload bridge)
 - Shared document-number settings and atomic number reservation for document creation
 - Real-time Companies/Brands and hierarchical Categories CRUD
+- Full Product CRUD with atomic opening-stock ledger creation
 
-Dashboard reporting modules remain read-only. Document settings, number reservation, and master-data maintenance are the intentional, scoped Firestore write workflows.
+Dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, and product/stock-baseline creation are the intentional, scoped Firestore write workflows.
 
 ## Run locally
 
@@ -38,7 +39,7 @@ npm run dist
 3. Copy the Web app's `firebaseConfig` fields to `desktop/.env`.
 4. In **Authentication → Sign-in method**, enable **Google**.
 5. In **Authentication → Settings → Authorized domains**, add `localhost` and `127.0.0.1` for local/Electron development. The packaged desktop app serves its renderer over a loopback HTTP origin because Firebase's browser Auth SDK does not support `file://` OAuth.
-6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, and `categories` documents.
+6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, and `stockTransactions` documents.
 
 Example development rule shape:
 
@@ -48,7 +49,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, and Companies/Categories master data are the limited write operations added so far.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, and Products with their opening stock baseline are the limited write operations added so far.
 
 ## Data flow
 
@@ -88,7 +89,35 @@ users/{uid}/businesses/{businessId}/categories/{categoryId}
 
 with `name`, `parentId`, `description`, and `isActive`. Both pages use `onSnapshot()` for live lists and use `addDoc`, `updateDoc`, and `deleteDoc` for master-data changes.
 
-Categories render as an expandable tree. Before deletion, the client checks whether a `products` document has a matching `categoryId`, and blocks the delete with a warning. It also blocks deletion of a category that still has subcategories to prevent orphaned hierarchy data.
+Categories render as an expandable tree. Before deletion, the client checks whether a `products` document has a matching `category` or `subcategory` name, and blocks the delete with a warning. It also blocks deletion of a category that still has subcategories to prevent orphaned hierarchy data.
+
+## Product catalog and opening stock
+
+The **Products** page manages:
+
+```text
+users/{uid}/businesses/{businessId}/products/{productId}
+```
+
+with company identity, denormalized `companyName`, basic product details, pricing, category/subcategory strings, stock quantity, notes, and image URI. It subscribes with `onSnapshot()` and offers search, Company/Category filters, and low-stock highlighting.
+
+On **create**, `createProductWithOpeningStock()` uses one Firestore `writeBatch()` to create both the product and:
+
+```text
+users/{uid}/businesses/{businessId}/stockTransactions/{transactionId}
+```
+
+The stock transaction always includes:
+
+```ts
+{
+  productId,
+  type: 'OPENING',
+  quantityIn: initialStockQty,
+}
+```
+
+The edit payload intentionally excludes `stockQty`; it can only change through Purchase, Sale, or Adjustment workflows.
 
 ## Document numbering
 

@@ -104,9 +104,12 @@ export async function getCategoryDeleteBlocker(
   allCategories: Category[],
 ): Promise<CategoryDeleteBlocker> {
   const productsRef = collection(requireFirestore(), getBusinessPath(uid, businessId, 'products'))
-  const linkedProducts = await getDocs(query(productsRef, where('categoryId', '==', category.id), limit(1)))
+  const [matchingCategory, matchingSubcategory] = await Promise.all([
+    getDocs(query(productsRef, where('category', '==', category.name), limit(1))),
+    getDocs(query(productsRef, where('subcategory', '==', category.name), limit(1))),
+  ])
 
-  if (!linkedProducts.empty) {
+  if (!matchingCategory.empty || !matchingSubcategory.empty) {
     return {
       kind: 'products',
       message: `Cannot delete “${category.name}” because one or more products are linked to it. Reassign those products first.`,
