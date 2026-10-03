@@ -2,7 +2,7 @@
   "name": "mybillbook-desktop-companion",
   "version": "0.1.0",
   "private": true,
-  "description": "Read-only Electron companion dashboard for MyBillBook showroom management.",
+  "description": "Electron companion dashboard with shared Firebase document numbering.",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "build": "npm run typecheck && vite build && tsc -p tsconfig.electron.json",
     "start": "electron .",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "test": "vitest run"
   },
   "dependencies": {
     "firebase": "^12.19.0",
@@ -30,6 +31,7 @@
     "electron-builder": "^26.15.3",
     "typescript": "^5.9.3",
     "vite": "^7.1.9",
+    "vitest": "^5.0.3",
     "wait-on": "^9.5.1"
   },
   "engines": {

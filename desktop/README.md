@@ -9,8 +9,9 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - `BusinessContext`, which stores the active `businessId`
 - A reusable `getBusinessPath(uid, businessId, collectionName)` helper for every subsequent Firestore query
 - Electron security defaults (`contextIsolation`, no Node integration, narrow preload bridge)
+- Shared document-number settings and atomic number reservation for document creation
 
-It deliberately contains **no Firestore write methods**. V1 remains read-only.
+The dashboard modules remain read-only. Document settings and number reservation are the intentional, tightly-scoped Firestore writes needed to keep mobile and desktop document numbers unique.
 
 ## Run locally
 
@@ -36,7 +37,7 @@ npm run dist
 3. Copy the Web app's `firebaseConfig` fields to `desktop/.env`.
 4. In **Authentication → Sign-in method**, enable **Google**.
 5. In **Authentication → Settings → Authorized domains**, add `localhost` and `127.0.0.1` for local/Electron development. The packaged desktop app serves its renderer over a loopback HTTP origin because Firebase's browser Auth SDK does not support `file://` OAuth.
-6. Ensure Firestore rules allow the signed-in user to read their own data.
+6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings` documents (for atomic number reservation and Settings edits).
 
 Example development rule shape:
 
@@ -46,7 +47,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. The desktop code has no mutation APIs in V1.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. The desktop dashboard data modules are read-only; document settings and atomic sequence reservation are the limited write operations added for numbering integrity.
 
 ## Data flow
 
@@ -69,6 +70,24 @@ Google Sign-In
 | `src/lib/firestorePaths.ts` | Scoped, validated Firestore path helpers |
 | `src/repositories/businessRepository.ts` | Real-time business subscription |
 | `electron/main.ts` | Secure Electron window and loopback renderer host |
+
+## Document numbering
+
+`src/lib/documentNumbering.ts` exposes:
+
+```ts
+generateNextDocumentNumber(uid, businessId, 'SALE')
+```
+
+It uses a Firestore `runTransaction()` on:
+
+```text
+users/{uid}/businesses/{businessId}/documentSettings/{docType}
+```
+
+If `nextNumber` is `1025`, the function returns `INV/2025-26/1025` (according to the document setting and Indian financial year) and atomically stores `1026`. This prevents duplicate numbers when Android and Electron issue documents concurrently. A later invoice-save failure can leave a gap; gaps are intentional and must never be reused.
+
+The **Settings → Document numbering** page allows prefix, next number, and digits to be edited. To preserve uniqueness, the UI only permits advancing a next number; reducing a live sequence is blocked.
 
 ## Next module
 

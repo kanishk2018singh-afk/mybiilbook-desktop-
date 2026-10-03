@@ -10,13 +10,13 @@ const foundationModules = [
   ['Reports', 'Showroom performance', '▤'],
 ]
 
-export function DashboardShell() {
+export function DashboardShell({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { user, signOut } = useAuth()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
 
   if (!user || !selectedBusiness || !selectedBusinessId) return null
 
-  // All upcoming repository queries will be scoped this way. Never omit uid or businessId.
+  // All upcoming repository queries are scoped to both uid and businessId.
   const salesInvoicesPath = getBusinessPath(user.uid, selectedBusinessId, 'salesInvoices')
 
   return (
@@ -29,6 +29,7 @@ export function DashboardShell() {
           <button className="nav-item" type="button" disabled><span>□</span> Inventory</button>
           <button className="nav-item" type="button" disabled><span>◎</span> Parties</button>
           <button className="nav-item" type="button" disabled><span>▤</span> Reports</button>
+          <button className="nav-item" type="button" onClick={onOpenSettings}><span>⚙</span> Settings</button>
         </nav>
         <div className="sidebar-foot">
           <span className="live-dot" /> Firestore live connection ready
@@ -64,7 +65,7 @@ export function DashboardShell() {
           </div>
         </section>
 
-        <section className="module-grid" aria-label="Upcoming read-only modules">
+        <section className="module-grid" aria-label="Desktop modules">
           {foundationModules.map(([title, description, icon]) => (
             <article className="module-card" key={title}>
               <span className="module-icon" aria-hidden="true">{icon}</span>
@@ -73,6 +74,12 @@ export function DashboardShell() {
               <span className="coming-soon">Read-only module</span>
             </article>
           ))}
+          <button className="module-card settings-module-card" type="button" onClick={onOpenSettings}>
+            <span className="module-icon" aria-hidden="true">#</span>
+            <h2>Document settings</h2>
+            <p>Prefix, financial year, next number and digit format for every shared sequence.</p>
+            <span className="coming-soon">Configure numbering →</span>
+          </button>
         </section>
       </section>
     </main>
