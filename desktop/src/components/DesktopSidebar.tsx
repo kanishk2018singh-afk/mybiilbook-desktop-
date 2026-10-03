@@ -1,6 +1,6 @@
 import { BrandMark } from './BrandMark'
 
-export type DesktopPage = 'overview' | 'companies' | 'categories' | 'products' | 'parties' | 'salesInvoice' | 'purchaseInvoice' | 'documentSettings'
+export type DesktopPage = 'overview' | 'companies' | 'categories' | 'products' | 'parties' | 'salesInvoices' | 'purchaseInvoices' | 'salesInvoice' | 'purchaseInvoice' | 'documentSettings'
 
 interface DesktopSidebarProps {
   activePage: DesktopPage
@@ -13,8 +13,8 @@ const navigation: Array<{ page: DesktopPage; icon: string; label: string }> = [
   { page: 'categories', icon: '⌘', label: 'Categories' },
   { page: 'products', icon: '▤', label: 'Products' },
   { page: 'parties', icon: '◎', label: 'Parties' },
-  { page: 'salesInvoice', icon: '↗', label: 'Sales invoice' },
-  { page: 'purchaseInvoice', icon: '↙', label: 'Purchase invoice' },
+  { page: 'salesInvoices', icon: '↗', label: 'Sales invoices' },
+  { page: 'purchaseInvoices', icon: '↙', label: 'Purchase invoices' },
   { page: 'documentSettings', icon: '⚙', label: 'Settings' },
 ]
 

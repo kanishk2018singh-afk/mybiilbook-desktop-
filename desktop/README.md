@@ -15,8 +15,9 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - Full Party CRUD, Customer/Supplier tabs, and live calculated party balances
 - Sales Invoice creation with live GST/payment totals and one atomic Firestore commit
 - Purchase Invoice creation with supplier references, stock increases, linked payments, and optional cost-price updates
+- Live Sales/Purchase invoice registers, immutable detail/payment history, stock-safe cancellation, and GST PDF export
 
-Dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, product/stock-baseline creation, and confirmed Sales/Purchase Invoice creation are the intentional, scoped Firestore write workflows.
+Dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, product/stock-baseline creation, and Sales/Purchase Invoice confirmation or cancellation are the intentional, scoped Firestore write workflows.
 
 ## Run locally
 
@@ -52,7 +53,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, and confirmed Sales/Purchase Invoices are the limited write operations added so far.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, and Sales/Purchase Invoice confirmation or cancellation are the limited write operations added so far.
 
 ## Data flow
 
@@ -204,6 +205,31 @@ The optional Paid Now amount reduces the supplier invoice's `balanceAmount`; its
 
 Before confirmation, the screen compares each entered purchase rate with the current product `purchasePrice`. If one or more rates differ, it presents **“Update product’s purchase price to new rate?”** and lists the changes. Choosing **Update prices & confirm** stores each accepted new rate in the corresponding product in the same transaction as the stock increase and invoice. **Keep current prices** confirms the purchase without changing the product master cost. This explicit choice prevents an accidental supplier-bill rate from silently changing future purchase defaults.
 
+## Invoice registers, detail, cancellation, and PDF
+
+The **Sales invoices** and **Purchase invoices** sidebar entries open real-time registers backed by their respective business-scoped collections. Registers offer client-side, inclusive filtering by date range, party snapshot, `paymentStatus` (`PAID`, `PARTIAL`, `UNPAID`), and document `status` (`DRAFT`, `CONFIRMED`, `CANCELLED`). Selecting a row opens an immutable detail page with the complete item snapshots, GST totals, party snapshot, and payment history read from:
+
+```text
+users/{uid}/businesses/{businessId}/invoicePayments  where invoiceId == {invoiceId}
+```
+
+New invoice-payment links also retain `paymentMode`, so the detail history does not need to infer it from a mutable party record. The printed **Print Invoice (PDF)** action uses `jspdf` to create a standard A4 GST-friendly document from the immutable invoice/item snapshots. It includes the business and party GST identities, document/date data, HSN/quantity/rate/tax line table, CGST/SGST or IGST summary, totals, and a prominent cancelled marker when applicable.
+
+### Cancellation is a reversal, not an edit
+
+`cancelConfirmedInvoice()` uses one Firestore transaction to change a `CONFIRMED` header to `CANCELLED`, update the affected product balances, and write one auditable inverse stock ledger row for every stored invoice item:
+
+| Original document | Cancellation stock row | Product stock effect |
+| --- | --- | --- |
+| Sale | `ADJUSTMENT_IN`, `quantityIn = item.qty` | Adds the sold quantity back |
+| Purchase | `ADJUSTMENT_OUT`, `quantityOut = item.qty` | Removes the received quantity |
+
+Every adjustment has `referenceType: 'INVOICE_CANCELLATION'`, the original `invoiceId`/number, source item ID, party snapshot, cancellation reason, and resulting `balanceAfter`. Purchase cancellation first verifies that the currently committed stock can cover the quantity to remove; it refuses the transaction rather than driving stock negative. As with confirmation, a concurrent product write makes Firestore retry the entire cancellation rather than leave a partial reversal.
+
+A linked payment is not deleted when an invoice is cancelled: deleting cash/bank history would be unsafe. The transaction marks its `invoicePayments` link `UNLINKED_ON_CANCELLATION` for the detail audit trail and removes the payment's invoice allocation fields, making it an unallocated customer/supplier advance in the Party balance calculation.
+
+**Confirmed invoices are deliberately never editable.** Their quantities already changed stock, their totals already changed a party balance, and their payment links may have posted cash/bank history. Editing any of those fields directly would break the audit trail and accounting integrity. Only an invoice with `status: 'DRAFT'` may be edited before it posts stock or payment effects; a confirmed mistake must be cancelled (posting the inverse adjustment) and replaced with a new invoice.
+
 ## Document numbering
 
 `src/lib/documentNumbering.ts` exposes:
@@ -222,9 +248,9 @@ If `nextNumber` is `1025`, the function returns `INV/2025-26/1025` (according to
 
 The **Settings → Document numbering** page allows prefix, next number, and digits to be edited. To preserve uniqueness, the UI only permits advancing a next number; reducing a live sequence is blocked.
 
-## Next module
+## Further modules
 
-Build the remaining read-only repositories using the selected scope, for example:
+Build remaining reporting and workflow repositories using the selected scope, for example:
 
 ```ts
 const path = getBusinessPath(uid, businessId, 'salesInvoices')

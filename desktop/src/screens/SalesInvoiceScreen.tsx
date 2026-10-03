@@ -18,6 +18,7 @@ import type { CreatedSalesInvoice, PaymentMode, SalesInvoiceLine } from '../type
 
 interface SalesInvoiceScreenProps {
   onNavigate: (page: DesktopPage) => void
+  onOpenInvoice: (invoiceId: string) => void
 }
 
 const PAYMENT_MODES: Array<{ value: PaymentMode; label: string }> = [
@@ -91,7 +92,7 @@ function paymentStatusLabel(status: CreatedSalesInvoice['paymentStatus']): strin
   return 'Unpaid'
 }
 
-export function SalesInvoiceScreen({ onNavigate }: SalesInvoiceScreenProps) {
+export function SalesInvoiceScreen({ onNavigate, onOpenInvoice }: SalesInvoiceScreenProps) {
   const { user, signOut } = useAuth()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [parties, setParties] = useState<Party[]>([])
@@ -283,7 +284,7 @@ export function SalesInvoiceScreen({ onNavigate }: SalesInvoiceScreenProps) {
 
   return (
     <main className="desktop-layout">
-      <DesktopSidebar activePage="salesInvoice" onNavigate={onNavigate} />
+      <DesktopSidebar activePage="salesInvoices" onNavigate={onNavigate} />
       <section className="dashboard-content sales-invoice-content">
         <header className="dashboard-header">
           <div>
@@ -432,7 +433,7 @@ export function SalesInvoiceScreen({ onNavigate }: SalesInvoiceScreenProps) {
               </section>
 
               {saveError ? <div className="settings-error invoice-save-message" role="alert">{saveError}</div> : null}
-              {savedInvoice ? <div className="invoice-saved-message" role="status"><strong>{savedInvoice.number} confirmed</strong><span>{money(savedInvoice.grandTotal)} · {paymentStatusLabel(savedInvoice.paymentStatus)} · balance {money(savedInvoice.balanceAmount)}</span></div> : null}
+              {savedInvoice ? <div className="invoice-saved-message" role="status"><strong>{savedInvoice.number} confirmed</strong><span>{money(savedInvoice.grandTotal)} · {paymentStatusLabel(savedInvoice.paymentStatus)} · balance {money(savedInvoice.balanceAmount)}</span><button className="table-action-button" type="button" onClick={() => onOpenInvoice(savedInvoice.id)}>View invoice</button></div> : null}
             </aside>
           </div>
         ) : null}

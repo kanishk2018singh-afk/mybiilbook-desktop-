@@ -288,6 +288,7 @@ export async function createConfirmedSalesInvoice(
         direction: 'IN',
         amount: totals.paidAmount,
         paymentDate: input.invoiceDate,
+        paymentMode: input.paymentMode,
         status: 'APPLIED',
         createdAt: serverTimestamp(),
         createdBy: uid,

@@ -63,18 +63,18 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
                 <span className="coming-soon">Manage parties →</span>
               </button>
             ) : title === 'Sales' ? (
-              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('salesInvoice')}>
+              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('salesInvoices')}>
                 <span className="module-icon" aria-hidden="true">{icon}</span>
                 <h2>{title}</h2>
                 <p>{description}</p>
-                <span className="coming-soon">Create sales invoice →</span>
+                <span className="coming-soon">Open sales register →</span>
               </button>
             ) : title === 'Purchases' ? (
-              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('purchaseInvoice')}>
+              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('purchaseInvoices')}>
                 <span className="module-icon" aria-hidden="true">{icon}</span>
                 <h2>{title}</h2>
                 <p>{description}</p>
-                <span className="coming-soon">Create purchase invoice →</span>
+                <span className="coming-soon">Open purchase register →</span>
               </button>
             ) : (
               <article className="module-card" key={title}>

@@ -294,6 +294,7 @@ export async function createConfirmedPurchaseInvoice(
         direction: 'OUT',
         amount: totals.paidAmount,
         paymentDate: input.purchaseDate,
+        paymentMode: input.paymentMode,
         status: 'APPLIED',
         createdAt: serverTimestamp(),
         createdBy: uid,
