@@ -14,8 +14,9 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - Full Product CRUD with atomic opening-stock ledger creation
 - Full Party CRUD, Customer/Supplier tabs, and live calculated party balances
 - Sales Invoice creation with live GST/payment totals and one atomic Firestore commit
+- Purchase Invoice creation with supplier references, stock increases, linked payments, and optional cost-price updates
 
-Dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, product/stock-baseline creation, and confirmed Sales Invoice creation are the intentional, scoped Firestore write workflows.
+Dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, product/stock-baseline creation, and confirmed Sales/Purchase Invoice creation are the intentional, scoped Firestore write workflows.
 
 ## Run locally
 
@@ -41,7 +42,7 @@ npm run dist
 3. Copy the Web app's `firebaseConfig` fields to `desktop/.env`.
 4. In **Authentication → Sign-in method**, enable **Google**.
 5. In **Authentication → Settings → Authorized domains**, add `localhost` and `127.0.0.1` for local/Electron development. The packaged desktop app serves its renderer over a loopback HTTP origin because Firebase's browser Auth SDK does not support `file://` OAuth.
-6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, `stockTransactions`, `parties`, `salesInvoices`, invoice `items`, `payments`, and `invoicePayments` documents used by the Sales Invoice workflow.
+6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, `stockTransactions`, `parties`, `salesInvoices`, `purchaseInvoices`, invoice `items`, `payments`, and `invoicePayments` documents used by invoice workflows.
 
 Example development rule shape:
 
@@ -51,7 +52,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, and confirmed Sales Invoices are the limited write operations added so far.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, and confirmed Sales/Purchase Invoices are the limited write operations added so far.
 
 ## Data flow
 
@@ -183,6 +184,26 @@ The transaction first reads current stock for every selected product, aggregates
 
 The invoice header stores `balanceAmount = grandTotal - paidAmount` with `PAID`, `PARTIAL`, or `UNPAID` status. Its payment document carries `invoiceId` / `salesInvoiceId`, so the Party detail calculator deliberately does not double-count that invoice-linked receipt.
 
+## Purchase invoices: stock-in and supplier payable
+
+The **Purchase invoice** screen uses the same taxable/GST/round-off summary and atomic document-number reservation pattern, but its party selector is restricted to active `SUPPLIER` and `BOTH` records. It records both the desktop `PURCHASE` number and the required manual `supplierInvoiceNumber` from the supplier's own bill. Product lines begin at the product master `purchasePrice`.
+
+On confirmation, `createConfirmedPurchaseInvoice()` runs one Firestore transaction that reads each affected product and then writes:
+
+```text
+users/{uid}/businesses/{businessId}/documentSettings/PURCHASE
+users/{uid}/businesses/{businessId}/products/{productId}                  stockQty + qty
+users/{uid}/businesses/{businessId}/purchaseInvoices/{invoiceId}
+users/{uid}/businesses/{businessId}/purchaseInvoices/{invoiceId}/items/{itemId}
+users/{uid}/businesses/{businessId}/stockTransactions/{transactionId}     type PURCHASE, quantityIn = qty
+users/{uid}/businesses/{businessId}/payments/{paymentId}                  direction OUT, when Paid Now > 0
+users/{uid}/businesses/{businessId}/invoicePayments/{linkId}              when Paid Now > 0
+```
+
+The optional Paid Now amount reduces the supplier invoice's `balanceAmount`; its linked payment is `OUT` and is intentionally excluded from the Party Detail net balance because the invoice balance already reflects it.
+
+Before confirmation, the screen compares each entered purchase rate with the current product `purchasePrice`. If one or more rates differ, it presents **“Update product’s purchase price to new rate?”** and lists the changes. Choosing **Update prices & confirm** stores each accepted new rate in the corresponding product in the same transaction as the stock increase and invoice. **Keep current prices** confirms the purchase without changing the product master cost. This explicit choice prevents an accidental supplier-bill rate from silently changing future purchase defaults.
+
 ## Document numbering
 
 `src/lib/documentNumbering.ts` exposes:
@@ -197,7 +218,7 @@ It uses a Firestore `runTransaction()` on:
 users/{uid}/businesses/{businessId}/documentSettings/{docType}
 ```
 
-If `nextNumber` is `1025`, the function returns `INV/2025-26/1025` (according to the document setting and Indian financial year) and atomically stores `1026`. This prevents duplicate numbers when Android and Electron issue documents concurrently. Standalone number reservations can leave a gap after a later document-save failure; gaps are intentional and must never be reused. Sales Invoice confirmation instead reserves its SALE number inside the same stock-and-invoice transaction, so a failed stock check or invoice write does not consume it.
+If `nextNumber` is `1025`, the function returns `INV/2025-26/1025` (according to the document setting and Indian financial year) and atomically stores `1026`. This prevents duplicate numbers when Android and Electron issue documents concurrently. Standalone number reservations can leave a gap after a later document-save failure; gaps are intentional and must never be reused. Sales and Purchase Invoice confirmation instead reserve their SALE/PURCHASE number inside the same stock-and-invoice transaction, so a failed stock check or invoice write does not consume it.
 
 The **Settings → Document numbering** page allows prefix, next number, and digits to be edited. To preserve uniqueness, the UI only permits advancing a next number; reducing a live sequence is blocked.
 

@@ -5,6 +5,7 @@ import { getBusinessPath } from '../lib/firestorePaths'
 
 const foundationModules = [
   ['Sales', 'Live invoices and collections', '↗'],
+  ['Purchases', 'Supplier bills and stock-in', '↙'],
   ['Stock', 'Inventory and low-stock alerts', '□'],
   ['Parties', 'Receivables and payables', '◎'],
   ['Reports', 'Showroom performance', '▤'],
@@ -43,7 +44,7 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
             <span className="status-chip"><span className="live-dot" /> Connected to Firebase</span>
             <h2>Desktop foundation is ready.</h2>
             <p>
-              Google authentication and business-scoped Firestore access are active. Party masters and live receivable/payable balances are ready. Create a sales invoice to safely reserve a number, update stock, and record payment in one transaction.
+              Google authentication and business-scoped Firestore access are active. Sales and purchase invoices safely reserve numbers, move stock, and record linked payments in one transaction.
             </p>
           </div>
           <div className="scope-card">
@@ -67,6 +68,13 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
                 <h2>{title}</h2>
                 <p>{description}</p>
                 <span className="coming-soon">Create sales invoice →</span>
+              </button>
+            ) : title === 'Purchases' ? (
+              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('purchaseInvoice')}>
+                <span className="module-icon" aria-hidden="true">{icon}</span>
+                <h2>{title}</h2>
+                <p>{description}</p>
+                <span className="coming-soon">Create purchase invoice →</span>
               </button>
             ) : (
               <article className="module-card" key={title}>
