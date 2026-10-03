@@ -1,4 +1,4 @@
-import { BrandMark } from '../components/BrandMark'
+import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
 import { getBusinessPath } from '../lib/firestorePaths'
@@ -10,7 +10,7 @@ const foundationModules = [
   ['Reports', 'Showroom performance', '▤'],
 ]
 
-export function DashboardShell({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage) => void }) {
   const { user, signOut } = useAuth()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
 
@@ -21,20 +21,7 @@ export function DashboardShell({ onOpenSettings }: { onOpenSettings: () => void 
 
   return (
     <main className="desktop-layout">
-      <aside className="sidebar">
-        <BrandMark />
-        <nav aria-label="Desktop navigation">
-          <button className="nav-item active" type="button"><span>▦</span> Overview</button>
-          <button className="nav-item" type="button" disabled><span>↗</span> Sales</button>
-          <button className="nav-item" type="button" disabled><span>□</span> Inventory</button>
-          <button className="nav-item" type="button" disabled><span>◎</span> Parties</button>
-          <button className="nav-item" type="button" disabled><span>▤</span> Reports</button>
-          <button className="nav-item" type="button" onClick={onOpenSettings}><span>⚙</span> Settings</button>
-        </nav>
-        <div className="sidebar-foot">
-          <span className="live-dot" /> Firestore live connection ready
-        </div>
-      </aside>
+      <DesktopSidebar activePage="overview" onNavigate={onNavigate} />
 
       <section className="dashboard-content">
         <header className="dashboard-header">
@@ -74,7 +61,7 @@ export function DashboardShell({ onOpenSettings }: { onOpenSettings: () => void 
               <span className="coming-soon">Read-only module</span>
             </article>
           ))}
-          <button className="module-card settings-module-card" type="button" onClick={onOpenSettings}>
+          <button className="module-card settings-module-card" type="button" onClick={() => onNavigate('documentSettings')}>
             <span className="module-icon" aria-hidden="true">#</span>
             <h2>Document settings</h2>
             <p>Prefix, financial year, next number and digit format for every shared sequence.</p>

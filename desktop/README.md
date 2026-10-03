@@ -10,8 +10,9 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - A reusable `getBusinessPath(uid, businessId, collectionName)` helper for every subsequent Firestore query
 - Electron security defaults (`contextIsolation`, no Node integration, narrow preload bridge)
 - Shared document-number settings and atomic number reservation for document creation
+- Real-time Companies/Brands and hierarchical Categories CRUD
 
-The dashboard modules remain read-only. Document settings and number reservation are the intentional, tightly-scoped Firestore writes needed to keep mobile and desktop document numbers unique.
+Dashboard reporting modules remain read-only. Document settings, number reservation, and master-data maintenance are the intentional, scoped Firestore write workflows.
 
 ## Run locally
 
@@ -37,7 +38,7 @@ npm run dist
 3. Copy the Web app's `firebaseConfig` fields to `desktop/.env`.
 4. In **Authentication → Sign-in method**, enable **Google**.
 5. In **Authentication → Settings → Authorized domains**, add `localhost` and `127.0.0.1` for local/Electron development. The packaged desktop app serves its renderer over a loopback HTTP origin because Firebase's browser Auth SDK does not support `file://` OAuth.
-6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings` documents (for atomic number reservation and Settings edits).
+6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, and `categories` documents.
 
 Example development rule shape:
 
@@ -47,7 +48,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. The desktop dashboard data modules are read-only; document settings and atomic sequence reservation are the limited write operations added for numbering integrity.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, and Companies/Categories master data are the limited write operations added so far.
 
 ## Data flow
 
@@ -70,6 +71,24 @@ Google Sign-In
 | `src/lib/firestorePaths.ts` | Scoped, validated Firestore path helpers |
 | `src/repositories/businessRepository.ts` | Real-time business subscription |
 | `electron/main.ts` | Secure Electron window and loopback renderer host |
+
+## Master data: companies and categories
+
+The **Companies** page manages brand records at:
+
+```text
+users/{uid}/businesses/{businessId}/companies/{companyId}
+```
+
+with `name`, `description`, and `isDefault`. The **Categories** page manages:
+
+```text
+users/{uid}/businesses/{businessId}/categories/{categoryId}
+```
+
+with `name`, `parentId`, `description`, and `isActive`. Both pages use `onSnapshot()` for live lists and use `addDoc`, `updateDoc`, and `deleteDoc` for master-data changes.
+
+Categories render as an expandable tree. Before deletion, the client checks whether a `products` document has a matching `categoryId`, and blocks the delete with a warning. It also blocks deletion of a category that still has subcategories to prevent orphaned hierarchy data.
 
 ## Document numbering
 

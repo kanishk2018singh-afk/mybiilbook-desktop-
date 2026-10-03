@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BrandMark } from '../components/BrandMark'
+import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
 import {
@@ -12,7 +12,7 @@ import {
 import { subscribeToDocumentSettings } from '../repositories/documentSettingsRepository'
 
 interface DocumentSettingsScreenProps {
-  onBack: () => void
+  onNavigate: (page: DesktopPage) => void
 }
 
 interface SettingDraft {
@@ -167,7 +167,7 @@ function SettingCard({ setting, uid, businessId }: { setting: DocumentSetting; u
   )
 }
 
-export function DocumentSettingsScreen({ onBack }: DocumentSettingsScreenProps) {
+export function DocumentSettingsScreen({ onNavigate }: DocumentSettingsScreenProps) {
   const { user, signOut } = useAuth()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [settings, setSettings] = useState<DocumentSetting[]>([])
@@ -199,20 +199,7 @@ export function DocumentSettingsScreen({ onBack }: DocumentSettingsScreenProps) 
 
   return (
     <main className="desktop-layout">
-      <aside className="sidebar">
-        <BrandMark />
-        <nav aria-label="Desktop navigation">
-          <button className="nav-item" type="button" onClick={onBack}><span>▦</span> Overview</button>
-          <button className="nav-item" type="button" disabled><span>↗</span> Sales</button>
-          <button className="nav-item" type="button" disabled><span>□</span> Inventory</button>
-          <button className="nav-item" type="button" disabled><span>◎</span> Parties</button>
-          <button className="nav-item" type="button" disabled><span>▤</span> Reports</button>
-          <button className="nav-item active" type="button"><span>⚙</span> Settings</button>
-        </nav>
-        <div className="sidebar-foot">
-          <span className="live-dot" /> Settings sync live with Firestore
-        </div>
-      </aside>
+      <DesktopSidebar activePage="documentSettings" onNavigate={onNavigate} />
 
       <section className="dashboard-content settings-content">
         <header className="dashboard-header">
