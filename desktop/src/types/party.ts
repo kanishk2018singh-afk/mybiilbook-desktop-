@@ -10,6 +10,8 @@ export interface Party {
   gstin: string
   address: string
   state: string
+  /** Optional explicit GST state code on newer Party documents. */
+  stateCode?: string
   city: string
   pincode: string
   openingBalance: number
@@ -28,6 +30,8 @@ export interface PartyInput {
   gstin: string
   address: string
   state: string
+  /** Optional explicit GST state code on newer Party documents. */
+  stateCode?: string
   city: string
   pincode: string
   openingBalance: number

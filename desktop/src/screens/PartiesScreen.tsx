@@ -20,6 +20,7 @@ interface PartyDraft {
   gstin: string
   address: string
   state: string
+  stateCode: string
   city: string
   pincode: string
   openingBalance: string
@@ -38,6 +39,7 @@ const EMPTY_PARTY: PartyDraft = {
   gstin: '',
   address: '',
   state: '',
+  stateCode: '',
   city: '',
   pincode: '',
   openingBalance: '0',
@@ -57,6 +59,7 @@ function draftFromParty(party: Party): PartyDraft {
     gstin: party.gstin,
     address: party.address,
     state: party.state,
+    stateCode: party.stateCode ?? '',
     city: party.city,
     pincode: party.pincode,
     openingBalance: String(party.openingBalance),
@@ -132,6 +135,10 @@ function PartyEditor({
       setError('Enter valid non-negative values for opening balance, credit limit, and credit days.')
       return
     }
+    if (draft.stateCode && !/^\d{2}$/.test(draft.stateCode)) {
+      setError('GST state code must be a two-digit code, such as 08 for Rajasthan.')
+      return
+    }
 
     const duplicate = parties.some(
       (item) => item.id !== party?.id && item.name.localeCompare(draft.name.trim(), undefined, { sensitivity: 'accent' }) === 0,
@@ -149,6 +156,7 @@ function PartyEditor({
       gstin: draft.gstin,
       address: draft.address,
       state: draft.state,
+      stateCode: draft.stateCode,
       city: draft.city,
       pincode: draft.pincode,
       openingBalance,
@@ -220,6 +228,7 @@ function PartyEditor({
         <div className="form-grid two-columns">
           <label className="form-field form-field-wide"><span>Address</span><textarea value={draft.address} maxLength={500} placeholder="Street, area, landmark" onChange={(event) => updateDraft('address', event.target.value)} /></label>
           <label className="form-field"><span>State</span><input value={draft.state} maxLength={100} placeholder="e.g. Rajasthan" onChange={(event) => updateDraft('state', event.target.value)} /></label>
+          <label className="form-field"><span>GST state code</span><input value={draft.stateCode} maxLength={2} inputMode="numeric" placeholder="e.g. 08" onChange={(event) => updateDraft('stateCode', event.target.value.replace(/[^0-9]/g, ''))} /><small className="field-helper">Used to choose CGST/SGST or IGST on sales invoices.</small></label>
           <label className="form-field"><span>City</span><input value={draft.city} maxLength={100} placeholder="e.g. Jaipur" onChange={(event) => updateDraft('city', event.target.value)} /></label>
           <label className="form-field"><span>Pincode</span><input value={draft.pincode} maxLength={12} inputMode="numeric" placeholder="e.g. 302001" onChange={(event) => updateDraft('pincode', event.target.value)} /></label>
         </div>

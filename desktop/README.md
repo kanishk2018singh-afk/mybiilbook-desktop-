@@ -13,8 +13,9 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - Real-time Companies/Brands and hierarchical Categories CRUD
 - Full Product CRUD with atomic opening-stock ledger creation
 - Full Party CRUD, Customer/Supplier tabs, and live calculated party balances
+- Sales Invoice creation with live GST/payment totals and one atomic Firestore commit
 
-Dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, and product/stock-baseline creation are the intentional, scoped Firestore write workflows.
+Dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, product/stock-baseline creation, and confirmed Sales Invoice creation are the intentional, scoped Firestore write workflows.
 
 ## Run locally
 
@@ -40,7 +41,7 @@ npm run dist
 3. Copy the Web app's `firebaseConfig` fields to `desktop/.env`.
 4. In **Authentication → Sign-in method**, enable **Google**.
 5. In **Authentication → Settings → Authorized domains**, add `localhost` and `127.0.0.1` for local/Electron development. The packaged desktop app serves its renderer over a loopback HTTP origin because Firebase's browser Auth SDK does not support `file://` OAuth.
-6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, `stockTransactions`, `parties`, and the invoice/payment documents the Party detail view reads.
+6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, `stockTransactions`, `parties`, `salesInvoices`, invoice `items`, `payments`, and `invoicePayments` documents used by the Sales Invoice workflow.
 
 Example development rule shape:
 
@@ -50,7 +51,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, and Party masters are the limited write operations added so far.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, and confirmed Sales Invoices are the limited write operations added so far.
 
 ## Data flow
 
@@ -152,6 +153,36 @@ Invoice documents must expose numeric `balanceAmount` (the remaining amount afte
 
 Firestore rules must permit the user to read `salesInvoices`, `purchaseInvoices`, and `payments` below their selected business as well as write their `parties` documents. For production, replace the broad example rule above with field and ownership validation appropriate to the shared Android data model.
 
+## Sales invoices: atomic stock-safe confirmation
+
+The **Sales invoice** screen subscribes to the selected business's `products` and active customer-capable (`CUSTOMER` / `BOTH`) `parties`. Selecting either writes a snapshot into the invoice draft; the save never relies on a later product price or party-profile edit. Product rate begins at `mrp`, while quantity, rate, and line discount remain editable.
+
+GST is calculated per line as:
+
+```text
+gross = qty × rate
+line taxable = gross − line discount
+line/bill-discount-adjusted taxable × GST percent
+```
+
+An optional rupee bill discount is allocated pro-rata to taxable line amounts before GST, so the stored line snapshots sum exactly to the invoice header. Matching business and party GST state codes create CGST/SGST; differing codes create IGST. The screen reads explicit `stateCode` first, then the first two GSTIN digits as a compatibility fallback. New Party records can also store the optional two-digit GST state code.
+
+On confirm, `createConfirmedSalesInvoice()` executes one Firestore `runTransaction()` across:
+
+```text
+users/{uid}/businesses/{businessId}/documentSettings/SALE
+users/{uid}/businesses/{businessId}/products/{productId}
+users/{uid}/businesses/{businessId}/salesInvoices/{invoiceId}
+users/{uid}/businesses/{businessId}/salesInvoices/{invoiceId}/items/{itemId}
+users/{uid}/businesses/{businessId}/stockTransactions/{transactionId}
+users/{uid}/businesses/{businessId}/payments/{paymentId}              (only when Paid Now > 0)
+users/{uid}/businesses/{businessId}/invoicePayments/{linkId}          (only when Paid Now > 0)
+```
+
+The transaction first reads current stock for every selected product, aggregates duplicate lines, and aborts with `Insufficient stock for [product]` if the committed quantity cannot cover the sale. It then reserves the SALE number, decrements stock, writes the `CONFIRMED` invoice, immutable item snapshots, one `SALE` stock transaction per line, and (when applicable) the incoming payment plus its invoice-payment link. They must be in **one** transaction so a crash can never leave stock reduced without an invoice, an invoice without item/ledger history, or a payment without its invoice; Firestore retries concurrent stock changes and rechecks availability before committing.
+
+The invoice header stores `balanceAmount = grandTotal - paidAmount` with `PAID`, `PARTIAL`, or `UNPAID` status. Its payment document carries `invoiceId` / `salesInvoiceId`, so the Party detail calculator deliberately does not double-count that invoice-linked receipt.
+
 ## Document numbering
 
 `src/lib/documentNumbering.ts` exposes:
@@ -166,13 +197,13 @@ It uses a Firestore `runTransaction()` on:
 users/{uid}/businesses/{businessId}/documentSettings/{docType}
 ```
 
-If `nextNumber` is `1025`, the function returns `INV/2025-26/1025` (according to the document setting and Indian financial year) and atomically stores `1026`. This prevents duplicate numbers when Android and Electron issue documents concurrently. A later invoice-save failure can leave a gap; gaps are intentional and must never be reused.
+If `nextNumber` is `1025`, the function returns `INV/2025-26/1025` (according to the document setting and Indian financial year) and atomically stores `1026`. This prevents duplicate numbers when Android and Electron issue documents concurrently. Standalone number reservations can leave a gap after a later document-save failure; gaps are intentional and must never be reused. Sales Invoice confirmation instead reserves its SALE number inside the same stock-and-invoice transaction, so a failed stock check or invoice write does not consume it.
 
 The **Settings → Document numbering** page allows prefix, next number, and digits to be edited. To preserve uniqueness, the UI only permits advancing a next number; reducing a live sequence is blocked.
 
 ## Next module
 
-Build read-only repositories using the selected scope, for example:
+Build the remaining read-only repositories using the selected scope, for example:
 
 ```ts
 const path = getBusinessPath(uid, businessId, 'salesInvoices')

@@ -10,6 +10,7 @@ export type BusinessCollectionName =
   | 'salesInvoices'
   | 'purchaseInvoices'
   | 'payments'
+  | 'invoicePayments'
   | 'expenses'
   | 'quotations'
   | 'creditNotes'

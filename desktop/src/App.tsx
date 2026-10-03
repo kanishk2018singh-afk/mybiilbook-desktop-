@@ -12,6 +12,7 @@ import { DocumentSettingsScreen } from './screens/DocumentSettingsScreen'
 import { ProductsScreen } from './screens/ProductsScreen'
 import { PartiesScreen } from './screens/PartiesScreen'
 import { PartyDetailScreen } from './screens/PartyDetailScreen'
+import { SalesInvoiceScreen } from './screens/SalesInvoiceScreen'
 import { EmptyBusinessesScreen } from './screens/EmptyBusinessesScreen'
 import { FirebaseSetupScreen } from './screens/FirebaseSetupScreen'
 import { LoadingScreen } from './screens/LoadingScreen'
@@ -47,6 +48,7 @@ export default function App() {
   if (page === 'companies') return <CompaniesScreen onNavigate={navigate} />
   if (page === 'categories') return <CategoriesScreen onNavigate={navigate} />
   if (page === 'products') return <ProductsScreen onNavigate={navigate} />
+  if (page === 'salesInvoice') return <SalesInvoiceScreen onNavigate={navigate} />
   if (page === 'parties') {
     return <PartiesScreen onNavigate={navigate} onOpenParty={(partyId) => { setSelectedPartyId(partyId); setPage('partyDetail') }} />
   }

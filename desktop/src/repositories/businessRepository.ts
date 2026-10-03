@@ -28,6 +28,8 @@ function toBusiness(id: string, data: DocumentData): Business {
     address: textValue(data.address) ?? textValue(profile?.address),
     phone: textValue(data.phone) ?? textValue(profile?.phone),
     gstin: textValue(data.gstin) ?? textValue(profile?.gstin),
+    stateCode: textValue(data.stateCode) ?? textValue(profile?.stateCode),
+    state: textValue(data.state) ?? textValue(profile?.state) ?? textValue(data.stateName) ?? textValue(profile?.stateName),
   }
 }
 

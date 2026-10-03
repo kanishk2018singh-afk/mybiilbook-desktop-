@@ -43,7 +43,7 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
             <span className="status-chip"><span className="live-dot" /> Connected to Firebase</span>
             <h2>Desktop foundation is ready.</h2>
             <p>
-              Google authentication and business-scoped Firestore access are active. Party masters and live receivable/payable balances are ready; sales, stock, and reports remain read-only modules.
+              Google authentication and business-scoped Firestore access are active. Party masters and live receivable/payable balances are ready. Create a sales invoice to safely reserve a number, update stock, and record payment in one transaction.
             </p>
           </div>
           <div className="scope-card">
@@ -60,6 +60,13 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
                 <h2>{title}</h2>
                 <p>{description}</p>
                 <span className="coming-soon">Manage parties →</span>
+              </button>
+            ) : title === 'Sales' ? (
+              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('salesInvoice')}>
+                <span className="module-icon" aria-hidden="true">{icon}</span>
+                <h2>{title}</h2>
+                <p>{description}</p>
+                <span className="coming-soon">Create sales invoice →</span>
               </button>
             ) : (
               <article className="module-card" key={title}>

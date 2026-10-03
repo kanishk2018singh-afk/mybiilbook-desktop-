@@ -4,6 +4,7 @@ import {
   serverTimestamp,
   type DocumentData,
   type DocumentReference,
+  type Transaction,
 } from 'firebase/firestore'
 import { requireFirestore } from './firebase'
 import { getBusinessPath } from './firestorePaths'
@@ -187,6 +188,59 @@ export function formatDocumentNumber(
 }
 
 /**
+ * Reserves a number inside a caller-owned Firestore transaction. Keeping this
+ * logic reusable is essential for invoice creation: the sequence increment,
+ * stock changes, invoice, items, and payment must either all commit or all
+ * roll back together.
+ *
+ * Call this only after every other transaction read has been issued. Firestore
+ * transactions require reads before writes; this helper reads the setting and
+ * then queues its sequence write.
+ */
+export async function reserveNextDocumentNumberInTransaction(
+  transaction: Transaction,
+  uid: string,
+  businessId: string,
+  docType: DocumentType,
+): Promise<string> {
+  const reference = documentSettingReference(uid, businessId, docType)
+  const snapshot = await transaction.get(reference)
+
+  if (!snapshot.exists()) {
+    const initial = defaultSetting(docType)
+    transaction.set(reference, {
+      prefix: initial.prefix,
+      includeFy: initial.includeFy,
+      nextNumber: initial.nextNumber + 1,
+      digits: initial.digits,
+      enabled: initial.enabled,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    return formatDocumentNumber(initial, initial.nextNumber)
+  }
+
+  const setting = issuableDocumentSetting(docType, snapshot.data())
+  if (!setting.enabled) {
+    throw new DocumentNumberingError(
+      'DOCUMENT_TYPE_DISABLED',
+      `${DOCUMENT_TYPE_LABELS[docType]} numbering is disabled in Settings.`,
+    )
+  }
+  if (setting.nextNumber >= Number.MAX_SAFE_INTEGER) {
+    throw new DocumentNumberingError('NUMBER_LIMIT_REACHED', 'The document sequence has reached its maximum safe value.')
+  }
+
+  const serialNumber = setting.nextNumber
+  transaction.update(reference, {
+    nextNumber: serialNumber + 1,
+    updatedAt: serverTimestamp(),
+  })
+
+  return formatDocumentNumber(setting, serialNumber)
+}
+
+/**
  * Atomically reserves the current `nextNumber` and advances it by one.
  *
  * If `nextNumber` is 1025, this returns `.../1025` and writes 1026. That
@@ -199,44 +253,10 @@ export async function generateNextDocumentNumber(
   docType: DocumentType,
 ): Promise<string> {
   const database = requireFirestore()
-  const reference = documentSettingReference(uid, businessId, docType)
-
-  return runTransaction(database, async (transaction) => {
-    const snapshot = await transaction.get(reference)
-
-    if (!snapshot.exists()) {
-      const initial = defaultSetting(docType)
-      transaction.set(reference, {
-        prefix: initial.prefix,
-        includeFy: initial.includeFy,
-        nextNumber: initial.nextNumber + 1,
-        digits: initial.digits,
-        enabled: initial.enabled,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      })
-      return formatDocumentNumber(initial, initial.nextNumber)
-    }
-
-    const setting = issuableDocumentSetting(docType, snapshot.data())
-    if (!setting.enabled) {
-      throw new DocumentNumberingError(
-        'DOCUMENT_TYPE_DISABLED',
-        `${DOCUMENT_TYPE_LABELS[docType]} numbering is disabled in Settings.`,
-      )
-    }
-    if (setting.nextNumber >= Number.MAX_SAFE_INTEGER) {
-      throw new DocumentNumberingError('NUMBER_LIMIT_REACHED', 'The document sequence has reached its maximum safe value.')
-    }
-
-    const serialNumber = setting.nextNumber
-    transaction.update(reference, {
-      nextNumber: serialNumber + 1,
-      updatedAt: serverTimestamp(),
-    })
-
-    return formatDocumentNumber(setting, serialNumber)
-  })
+  return runTransaction(
+    database,
+    (transaction) => reserveNextDocumentNumberInTransaction(transaction, uid, businessId, docType),
+  )
 }
 
 /**
