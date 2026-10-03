@@ -12,6 +12,7 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - Shared document-number settings and atomic number reservation for document creation
 - Real-time Companies/Brands and hierarchical Categories CRUD
 - Full Product CRUD with atomic opening-stock ledger creation
+- Full Party CRUD, Customer/Supplier tabs, and live calculated party balances
 
 Dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, and product/stock-baseline creation are the intentional, scoped Firestore write workflows.
 
@@ -39,7 +40,7 @@ npm run dist
 3. Copy the Web app's `firebaseConfig` fields to `desktop/.env`.
 4. In **Authentication → Sign-in method**, enable **Google**.
 5. In **Authentication → Settings → Authorized domains**, add `localhost` and `127.0.0.1` for local/Electron development. The packaged desktop app serves its renderer over a loopback HTTP origin because Firebase's browser Auth SDK does not support `file://` OAuth.
-6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, and `stockTransactions` documents.
+6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, `stockTransactions`, `parties`, and the invoice/payment documents the Party detail view reads.
 
 Example development rule shape:
 
@@ -49,7 +50,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, and Products with their opening stock baseline are the limited write operations added so far.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, and Party masters are the limited write operations added so far.
 
 ## Data flow
 
@@ -118,6 +119,38 @@ The stock transaction always includes:
 ```
 
 The edit payload intentionally excludes `stockQty`; it can only change through Purchase, Sale, or Adjustment workflows.
+
+## Parties and calculated balances
+
+The **Parties** page manages the live master collection:
+
+```text
+users/{uid}/businesses/{businessId}/parties/{partyId}
+```
+
+Each record stores `type` (`CUSTOMER`, `SUPPLIER`, or `BOTH`), contact/GST/address fields, `openingBalance`, `openingBalanceType` (`RECEIVABLE` or `PAYABLE`), `creditLimit`, `creditDays`, `isActive`, and `notes`. The Customers and Suppliers tabs deliberately include a `BOTH` party in each applicable list. Party create, edit, and delete use ordinary `addDoc`, `updateDoc`, and `deleteDoc`; party lists use `onSnapshot()`.
+
+The Party Detail page derives a **current** balance from three scoped real-time queries:
+
+```text
+users/{uid}/businesses/{businessId}/salesInvoices   where partyId == partyId
+users/{uid}/businesses/{businessId}/purchaseInvoices where partyId == partyId
+users/{uid}/businesses/{businessId}/payments        where partyId == partyId
+```
+
+Its signed convention is `+` receivable (the party owes the showroom) and `-` payable (the showroom owes the party):
+
+```text
+signed opening balance
++ remaining sales-invoice balanceAmount
+- remaining purchase-invoice balanceAmount
+- unallocated incoming payment
++ unallocated outgoing payment
+```
+
+Invoice documents must expose numeric `balanceAmount` (the remaining amount after allocations) and `partyId`; the reader accepts `balanceDue` and `dueAmount` only as migration fallbacks. Payments must expose `partyId`, numeric `amount`, an incoming/outgoing direction, and—when allocated—one of `invoiceId`, `salesInvoiceId`, `purchaseInvoiceId`, or `againstInvoiceId`. An invoice-linked payment is intentionally excluded from the arithmetic because that allocation is already represented by the invoice's remaining `balanceAmount`; including both would double count it.
+
+Firestore rules must permit the user to read `salesInvoices`, `purchaseInvoices`, and `payments` below their selected business as well as write their `parties` documents. For production, replace the broad example rule above with field and ownership validation appropriate to the shared Android data model.
 
 ## Document numbering
 

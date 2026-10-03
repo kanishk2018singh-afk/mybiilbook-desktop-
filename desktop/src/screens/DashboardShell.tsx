@@ -43,7 +43,7 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
             <span className="status-chip"><span className="live-dot" /> Connected to Firebase</span>
             <h2>Desktop foundation is ready.</h2>
             <p>
-              Google authentication and business-scoped Firestore access are active. The next module can safely subscribe to sales, stock, party and payment collections.
+              Google authentication and business-scoped Firestore access are active. Party masters and live receivable/payable balances are ready; sales, stock, and reports remain read-only modules.
             </p>
           </div>
           <div className="scope-card">
@@ -54,12 +54,21 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
 
         <section className="module-grid" aria-label="Desktop modules">
           {foundationModules.map(([title, description, icon]) => (
-            <article className="module-card" key={title}>
-              <span className="module-icon" aria-hidden="true">{icon}</span>
-              <h2>{title}</h2>
-              <p>{description}</p>
-              <span className="coming-soon">Read-only module</span>
-            </article>
+            title === 'Parties' ? (
+              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('parties')}>
+                <span className="module-icon" aria-hidden="true">{icon}</span>
+                <h2>{title}</h2>
+                <p>{description}</p>
+                <span className="coming-soon">Manage parties →</span>
+              </button>
+            ) : (
+              <article className="module-card" key={title}>
+                <span className="module-icon" aria-hidden="true">{icon}</span>
+                <h2>{title}</h2>
+                <p>{description}</p>
+                <span className="coming-soon">Read-only module</span>
+              </article>
+            )
           ))}
           <button className="module-card settings-module-card" type="button" onClick={() => onNavigate('documentSettings')}>
             <span className="module-icon" aria-hidden="true">#</span>
