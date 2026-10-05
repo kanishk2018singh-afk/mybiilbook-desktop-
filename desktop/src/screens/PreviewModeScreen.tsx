@@ -33,6 +33,14 @@ const pageCopy: Partial<Record<DesktopPage, { title: string; description: string
     title: 'Purchase invoices',
     description: 'The live purchase register, filters, details, PDF export, and cancellation workflow will appear here after authentication is re-enabled.',
   },
+  payments: {
+    title: 'Payments',
+    description: 'The payment register and its date, party, direction, and mode filters will appear here after authentication is re-enabled.',
+  },
+  recordPayment: {
+    title: 'Record payment',
+    description: 'The independent payment form and multi-invoice allocation workflow will appear here after authentication is re-enabled.',
+  },
   documentSettings: {
     title: 'Document settings',
     description: 'Shared document numbering will appear here after authentication is re-enabled.',

@@ -457,16 +457,39 @@ export async function cancelConfirmedInvoice(
         updatedAt: serverTimestamp(),
       })
       if (payment?.snapshot.exists()) {
-        transaction.update(payment.reference, {
-          invoiceId: deleteField(),
-          salesInvoiceId: deleteField(),
-          purchaseInvoiceId: deleteField(),
-          source: 'INVOICE_CANCELLED_PAYMENT_ADVANCE',
-          unlinkedFromInvoiceId: invoiceId,
-          unlinkedFromInvoiceNumber: invoiceNumber,
-          unlinkedAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        })
+        const paymentData = payment.snapshot.data() ?? {}
+        const linkAmount = numeric(link.data()?.amount)
+        const usesSplitAllocationFields = text(paymentData.source) === 'STANDALONE_PAYMENT'
+          || typeof paymentData.allocatedAmount === 'number'
+          || typeof paymentData.unallocatedAmount === 'number'
+
+        if (usesSplitAllocationFields) {
+          // A standalone payment can be divided over several invoices. Releasing
+          // one cancelled invoice must make only this link amount an on-account
+          // advance; other live invoice allocations remain intact.
+          const currentAllocatedAmount = Math.max(0, numeric(paymentData.allocatedAmount))
+          const currentUnallocatedAmount = Math.max(0, numeric(paymentData.unallocatedAmount))
+          transaction.update(payment.reference, {
+            allocatedAmount: Math.max(0, currentAllocatedAmount - linkAmount),
+            unallocatedAmount: currentUnallocatedAmount + linkAmount,
+            allocationCount: Math.max(0, Math.trunc(numeric(paymentData.allocationCount)) - 1),
+            unlinkedFromInvoiceId: invoiceId,
+            unlinkedFromInvoiceNumber: invoiceNumber,
+            unlinkedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        } else {
+          transaction.update(payment.reference, {
+            invoiceId: deleteField(),
+            salesInvoiceId: deleteField(),
+            purchaseInvoiceId: deleteField(),
+            source: 'INVOICE_CANCELLED_PAYMENT_ADVANCE',
+            unlinkedFromInvoiceId: invoiceId,
+            unlinkedFromInvoiceNumber: invoiceNumber,
+            unlinkedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        }
       }
     }
 

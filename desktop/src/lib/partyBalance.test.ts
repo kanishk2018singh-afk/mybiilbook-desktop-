@@ -63,4 +63,29 @@ describe('party balance calculation', () => {
     // −400 opening −200 purchase +100 paid = −500 payable.
     expect(balance).toMatchObject({ currentSigned: -500, amount: 500, position: 'PAYABLE' })
   })
+
+  it('counts only the unallocated remainder of a multi-invoice payment', () => {
+    const balance = calculatePartyBalance(
+      { ...customer, openingBalance: 0 },
+      {
+        salesInvoices: [{ id: 's3', kind: 'SALE', number: 'INV-3', date: '', balanceAmount: 100, status: 'FINAL' }],
+        purchaseInvoices: [],
+        payments: [{
+          id: 'split-receipt',
+          direction: 'IN',
+          amount: 100,
+          allocatedAmount: 60,
+          unallocatedAmount: 40,
+          allocationCount: 2,
+          date: '',
+          invoiceId: '',
+          mode: 'UPI',
+          note: '',
+        }],
+      },
+    )
+    // The invoice balance has already fallen by the allocated 60. Only the
+    // remaining 40 receipt is an on-account advance: +100 −40 = +60 due.
+    expect(balance).toMatchObject({ salesInvoiceBalance: 100, unallocatedMoneyIn: 40, currentSigned: 60 })
+  })
 })

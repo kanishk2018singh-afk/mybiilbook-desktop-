@@ -16,6 +16,8 @@ import { SalesInvoiceScreen } from './screens/SalesInvoiceScreen'
 import { PurchaseInvoiceScreen } from './screens/PurchaseInvoiceScreen'
 import { InvoiceListScreen } from './screens/InvoiceListScreen'
 import { InvoiceDetailScreen } from './screens/InvoiceDetailScreen'
+import { PaymentsListScreen } from './screens/PaymentsListScreen'
+import { RecordPaymentScreen } from './screens/RecordPaymentScreen'
 import type { InvoiceKind } from './types/invoice'
 import { EmptyBusinessesScreen } from './screens/EmptyBusinessesScreen'
 import { FirebaseSetupScreen } from './screens/FirebaseSetupScreen'
@@ -81,6 +83,8 @@ export default function App() {
       onBack={() => { setSelectedInvoice(null); setPage(selectedInvoice.kind === 'SALE' ? 'salesInvoices' : 'purchaseInvoices') }}
     />
   }
+  if (page === 'payments') return <PaymentsListScreen onNavigate={navigate} />
+  if (page === 'recordPayment') return <RecordPaymentScreen onNavigate={navigate} />
   if (page === 'documentSettings') return <DocumentSettingsScreen onNavigate={navigate} />
 
   return <DashboardShell onNavigate={navigate} />

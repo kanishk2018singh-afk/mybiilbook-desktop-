@@ -6,6 +6,7 @@ import { getBusinessPath } from '../lib/firestorePaths'
 const foundationModules = [
   ['Sales', 'Live invoices and collections', '↗'],
   ['Purchases', 'Supplier bills and stock-in', '↙'],
+  ['Payments', 'Receipts, payouts, and allocations', '₹'],
   ['Stock', 'Inventory and low-stock alerts', '□'],
   ['Parties', 'Receivables and payables', '◎'],
   ['Reports', 'Showroom performance', '▤'],
@@ -75,6 +76,13 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
                 <h2>{title}</h2>
                 <p>{description}</p>
                 <span className="coming-soon">Open purchase register →</span>
+              </button>
+            ) : title === 'Payments' ? (
+              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('payments')}>
+                <span className="module-icon" aria-hidden="true">{icon}</span>
+                <h2>{title}</h2>
+                <p>{description}</p>
+                <span className="coming-soon">Open payment register →</span>
               </button>
             ) : (
               <article className="module-card" key={title}>

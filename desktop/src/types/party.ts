@@ -57,9 +57,15 @@ export interface PartyPayment {
   id: string
   direction: PaymentDirection
   amount: number
+  /** Amount already applied through invoicePayments links. */
+  allocatedAmount?: number
+  /** On-account remainder; this alone changes the calculated party balance. */
+  unallocatedAmount?: number
+  allocationCount?: number
   date: string
   invoiceId: string
   mode: string
+  referenceNumber?: string
   note: string
 }
 

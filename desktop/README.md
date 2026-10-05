@@ -258,3 +258,18 @@ const path = getBusinessPath(uid, businessId, 'salesInvoices')
 ```
 
 Use `onSnapshot()` for dashboard data and unsubscribe when the selected business changes.
+
+## Standalone payments and multi-invoice allocations
+
+The **Payments** sidebar entry opens a register of incoming and outgoing payments with date range, party, direction, and payment-mode filters. **Record payment** handles a customer receipt (`IN`) or supplier payout (`OUT`) independently of invoice creation, which is useful when an old balance is settled later.
+
+An `IN` payment offers that customer's confirmed `UNPAID` / `PARTIAL` Sales invoices; an `OUT` payment offers the supplier's matching Purchase invoices. The operator may assign different amounts to multiple invoices or leave some/all of the amount on account. On save, `recordStandalonePayment()` first validates the selected invoice snapshots, then uses one Firestore `writeBatch()` to create:
+
+```text
+users/{uid}/businesses/{businessId}/payments/{paymentId}
+users/{uid}/businesses/{businessId}/invoicePayments/{linkId}  (one per allocation)
+```
+
+and update every affected invoice header's `paidAmount`, `balanceAmount`, and `paymentStatus`. A standalone payment stores `allocatedAmount`, `unallocatedAmount`, and `allocationCount`; Party Balance calculations use only `unallocatedAmount` because allocated amounts are already included in the invoice's reduced `balanceAmount`. This prevents a multi-invoice payment from being double counted.
+
+Invoice cancellation preserves the same invariant. Cancelling an invoice releases only that payment link's amount from a split standalone payment into its `unallocatedAmount`; allocations to the payment's other invoices remain intact.

@@ -60,15 +60,31 @@ function toLedgerEntries(activity: PartyActivity): LedgerEntry[] {
     signedAmount: invoice.status === 'CANCELLED' ? 0 : -invoice.balanceAmount,
     kind: 'purchase',
   }))
-  const payments: LedgerEntry[] = activity.payments.map((payment) => ({
-    id: `payment-${payment.id}`,
-    date: payment.date,
-    label: payment.direction === 'IN' ? 'Money received' : 'Money paid',
-    detail: payment.note || payment.mode || 'Payment entry',
-    signedAmount: payment.direction === 'IN' ? -payment.amount : payment.amount,
-    kind: payment.direction === 'IN' ? 'payment-in' : 'payment-out',
-    isAllocated: Boolean(payment.invoiceId),
-  }))
+  const payments: LedgerEntry[] = activity.payments.map((payment) => {
+    const onAccountAmount = typeof payment.unallocatedAmount === 'number'
+      ? Math.max(0, payment.unallocatedAmount)
+      : payment.invoiceId ? 0 : payment.amount
+    const allocatedAmount = typeof payment.allocatedAmount === 'number'
+      ? Math.max(0, payment.allocatedAmount)
+      : Math.max(0, payment.amount - onAccountAmount)
+    const paymentDetail = [
+      payment.note || payment.mode || 'Payment entry',
+      allocatedAmount > 0.005 ? `${money(allocatedAmount)} allocated to invoice${payment.allocationCount && payment.allocationCount > 1 ? 's' : ''}` : '',
+      onAccountAmount > 0.005 ? `${money(onAccountAmount)} on account` : '',
+    ].filter(Boolean).join(' · ')
+
+    return {
+      id: `payment-${payment.id}`,
+      date: payment.date,
+      label: `${payment.direction === 'IN' ? 'Money received' : 'Money paid'} · ${money(payment.amount)}`,
+      detail: paymentDetail,
+      // Linked amounts are already represented by invoice balances. The ledger
+      // total only displays the payment portion that remains on account.
+      signedAmount: payment.direction === 'IN' ? -onAccountAmount : onAccountAmount,
+      kind: payment.direction === 'IN' ? 'payment-in' : 'payment-out',
+      isAllocated: allocatedAmount > 0.005 && onAccountAmount <= 0.005,
+    }
+  })
   return [...sales, ...purchases, ...payments].sort((left, right) => activityTimestamp(right.date) - activityTimestamp(left.date))
 }
 

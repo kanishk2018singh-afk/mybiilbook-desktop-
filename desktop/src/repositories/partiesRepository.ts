@@ -92,14 +92,31 @@ function toInvoiceBalance(id: string, kind: PartyInvoiceBalance['kind'], data: D
 }
 
 function toPayment(id: string, data: DocumentData): PartyPayment {
+  const amount = number(data.amount)
+  // Older one-invoice payments use invoiceId. Standalone payments can split
+  // their amount across many invoicePayments links, so only unallocatedAmount
+  // may change the calculated party balance.
+  const invoiceId = text(data.invoiceId) || text(data.salesInvoiceId) || text(data.purchaseInvoiceId) || text(data.againstInvoiceId)
+  const storedUnallocatedAmount = typeof data.unallocatedAmount === 'number' && Number.isFinite(data.unallocatedAmount)
+    ? data.unallocatedAmount
+    : null
+  const unallocatedAmount = Math.max(0, storedUnallocatedAmount ?? (invoiceId ? 0 : amount))
+  const storedAllocatedAmount = typeof data.allocatedAmount === 'number' && Number.isFinite(data.allocatedAmount)
+    ? data.allocatedAmount
+    : null
+
   return {
     id,
     direction: paymentDirection(data.direction ?? data.paymentDirection ?? data.type),
-    amount: number(data.amount),
+    amount,
+    allocatedAmount: Math.max(0, storedAllocatedAmount ?? Math.max(0, amount - unallocatedAmount)),
+    unallocatedAmount,
+    allocationCount: Math.max(0, Math.trunc(number(data.allocationCount, invoiceId ? 1 : 0))),
     date: date(data.date) || date(data.paymentDate) || date(data.createdDate),
     // An invoice-linked payment is already reflected in invoice.balanceAmount and is excluded from the net calculation.
-    invoiceId: text(data.invoiceId) || text(data.salesInvoiceId) || text(data.purchaseInvoiceId) || text(data.againstInvoiceId),
+    invoiceId,
     mode: text(data.mode) || text(data.paymentMode),
+    referenceNumber: text(data.referenceNumber) || text(data.reference) || text(data.transactionId),
     note: text(data.note) || text(data.notes),
   }
 }

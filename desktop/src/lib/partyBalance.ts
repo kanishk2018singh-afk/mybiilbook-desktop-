@@ -19,9 +19,9 @@ function roundMoney(value: number): number {
 
 /**
  * Invoice `balanceAmount` is expected to be its *remaining* balance after any
- * payment allocated to that invoice. Adding an invoice-linked payment again
- * would double count it, so only payments with no invoice reference (advances
- * / on-account payments) enter this calculation.
+ * payment allocated to that invoice. Adding an allocated amount again would
+ * double count it, so only a payment's explicit on-account remainder enters
+ * this calculation. Legacy records use invoiceId as the allocation signal.
  *
  * Sign convention used throughout this file:
  *   + = RECEIVABLE (party owes the showroom)
@@ -44,13 +44,15 @@ export function calculatePartyBalance(party: Party, activity: PartyActivity): Pa
     .filter((invoice) => invoice.status !== 'CANCELLED')
     .reduce((total, invoice) => total + invoice.balanceAmount, 0)
 
-  const unallocatedPayments = activity.payments.filter((payment) => !isInvoiceAllocated(payment))
-  const unallocatedMoneyIn = unallocatedPayments
+  // A standalone payment may be divided across multiple invoices. Only its
+  // explicit on-account remainder affects the party total: linked amounts are
+  // already reflected by each invoice's reduced balanceAmount.
+  const unallocatedMoneyIn = activity.payments
     .filter((payment) => payment.direction === 'IN')
-    .reduce((total, payment) => total + payment.amount, 0)
-  const unallocatedMoneyOut = unallocatedPayments
+    .reduce((total, payment) => total + onAccountAmount(payment), 0)
+  const unallocatedMoneyOut = activity.payments
     .filter((payment) => payment.direction === 'OUT')
-    .reduce((total, payment) => total + payment.amount, 0)
+    .reduce((total, payment) => total + onAccountAmount(payment), 0)
 
   const currentSigned = roundMoney(
     openingSigned + salesInvoiceBalance - purchaseInvoiceBalance - unallocatedMoneyIn + unallocatedMoneyOut,
@@ -69,6 +71,13 @@ export function calculatePartyBalance(party: Party, activity: PartyActivity): Pa
   }
 }
 
-function isInvoiceAllocated(payment: PartyPayment): boolean {
-  return Boolean(payment.invoiceId.trim())
+function onAccountAmount(payment: PartyPayment): number {
+  // New standalone-payment records persist this field. The fallback preserves
+  // the legacy convention: one invoiceId means fully allocated; no invoiceId
+  // means the entire payment remains on account.
+  const explicitOnAccountAmount = payment.unallocatedAmount
+  if (typeof explicitOnAccountAmount === 'number' && Number.isFinite(explicitOnAccountAmount)) {
+    return Math.max(0, explicitOnAccountAmount)
+  }
+  return payment.invoiceId.trim() ? 0 : payment.amount
 }
