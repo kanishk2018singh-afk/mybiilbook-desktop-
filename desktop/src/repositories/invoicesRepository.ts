@@ -30,6 +30,7 @@ export type InvoiceCancellationErrorCode =
   | 'INVOICE_NOT_CONFIRMED'
   | 'INVOICE_ITEMS_MISSING'
   | 'INVOICE_ITEM_INVALID'
+  | 'INVOICE_HAS_RETURN_NOTES'
   | 'PRODUCT_NOT_FOUND'
   | 'INSUFFICIENT_STOCK_TO_CANCEL'
 
@@ -180,6 +181,8 @@ function toInvoiceDetail(id: string, kind: InvoiceKind, data: DocumentData): Omi
     beforeRoundOff: numeric(data.beforeRoundOff),
     roundOff: numeric(data.roundOff),
     paymentMode: text(data.paymentMode),
+    creditNoteCount: Math.max(0, Math.trunc(numeric(data.creditNoteCount))),
+    debitNoteCount: Math.max(0, Math.trunc(numeric(data.debitNoteCount))),
     createdBy: text(data.createdBy),
     cancellationReason: text(data.cancellationReason),
     cancelledBy: text(data.cancelledBy),
@@ -325,6 +328,12 @@ export async function cancelConfirmedInvoice(
     }
     if (invoiceStatus(invoiceSnapshot.data().status) !== 'CONFIRMED') {
       throw new InvoiceCancellationError('INVOICE_NOT_CONFIRMED', 'Only confirmed invoices can be cancelled. Drafts may be edited; cancelled invoices are immutable.')
+    }
+    const returnNoteCount = kind === 'SALE'
+      ? Math.max(0, Math.trunc(numeric(invoiceSnapshot.data().creditNoteCount)))
+      : Math.max(0, Math.trunc(numeric(invoiceSnapshot.data().debitNoteCount)))
+    if (returnNoteCount > 0) {
+      throw new InvoiceCancellationError('INVOICE_HAS_RETURN_NOTES', 'This invoice already has return notes. It cannot be cancelled because reversing every original item would double-post inventory. Keep the audited return-note trail and correct it with a separate adjustment if needed.')
     }
 
     if (itemDocumentSnapshots.some((item) => !item.exists())) {

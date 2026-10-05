@@ -19,6 +19,7 @@ import { InvoiceDetailScreen } from './screens/InvoiceDetailScreen'
 import { QuotationScreen } from './screens/QuotationScreen'
 import { QuotationListScreen } from './screens/QuotationListScreen'
 import { QuotationDetailScreen } from './screens/QuotationDetailScreen'
+import { ReturnNoteScreen } from './screens/ReturnNoteScreen'
 import { PaymentsListScreen } from './screens/PaymentsListScreen'
 import { RecordPaymentScreen } from './screens/RecordPaymentScreen'
 import type { InvoiceKind } from './types/invoice'
@@ -40,6 +41,7 @@ export default function App() {
   const [selectedInvoice, setSelectedInvoice] = useState<{ kind: InvoiceKind; id: string } | null>(null)
   const [selectedQuotationId, setSelectedQuotationId] = useState<string | null>(null)
   const [quotationConversion, setQuotationConversion] = useState<QuotationConversionDraft | null>(null)
+  const [returnNoteSource, setReturnNoteSource] = useState<{ kind: InvoiceKind; invoiceId: string } | null>(null)
 
   // A setting belongs to a business. Never carry a page from one showroom into another.
   useEffect(() => {
@@ -48,6 +50,7 @@ export default function App() {
     setSelectedInvoice(null)
     setSelectedQuotationId(null)
     setQuotationConversion(null)
+    setReturnNoteSource(null)
   }, [selectedBusinessId])
 
   // Preview Mode is deliberately isolated from live Firebase access so the UI can
@@ -67,6 +70,7 @@ export default function App() {
 
   const navigate = (target: DesktopPage) => {
     if (target !== 'salesInvoice') setQuotationConversion(null)
+    if (target !== 'creditNote' && target !== 'debitNote') setReturnNoteSource(null)
     setPage(target)
   }
   const openInvoice = (kind: InvoiceKind, id: string) => {
@@ -81,6 +85,8 @@ export default function App() {
   if (page === 'purchaseInvoices') return <InvoiceListScreen kind="PURCHASE" onNavigate={navigate} onOpenInvoice={openInvoice} />
   if (page === 'quotation') return <QuotationScreen onNavigate={navigate} onOpenQuotation={(id) => { setSelectedQuotationId(id); setPage('quotationDetail') }} />
   if (page === 'quotations') return <QuotationListScreen onNavigate={navigate} onOpenQuotation={(id) => { setSelectedQuotationId(id); setPage('quotationDetail') }} />
+  if (page === 'creditNote') return <ReturnNoteScreen noteKind="CREDIT" initialSourceInvoiceId={returnNoteSource?.kind === 'SALE' ? returnNoteSource.invoiceId : null} onNavigate={navigate} onOpenInvoice={openInvoice} />
+  if (page === 'debitNote') return <ReturnNoteScreen noteKind="DEBIT" initialSourceInvoiceId={returnNoteSource?.kind === 'PURCHASE' ? returnNoteSource.invoiceId : null} onNavigate={navigate} onOpenInvoice={openInvoice} />
   if (page === 'salesInvoice') return <SalesInvoiceScreen
     onNavigate={navigate}
     onOpenInvoice={(id) => openInvoice('SALE', id)}
@@ -113,6 +119,10 @@ export default function App() {
       invoiceId={selectedInvoice.id}
       onNavigate={navigate}
       onBack={() => { setSelectedInvoice(null); setPage(selectedInvoice.kind === 'SALE' ? 'salesInvoices' : 'purchaseInvoices') }}
+      onCreateReturnNote={(kind, invoiceId) => {
+        setReturnNoteSource({ kind, invoiceId })
+        setPage(kind === 'SALE' ? 'creditNote' : 'debitNote')
+      }}
     />
   }
   if (page === 'payments') return <PaymentsListScreen onNavigate={navigate} />

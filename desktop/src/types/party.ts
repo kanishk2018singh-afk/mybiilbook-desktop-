@@ -53,6 +53,19 @@ export interface PartyInvoiceBalance {
 
 export type PaymentDirection = 'IN' | 'OUT'
 
+export interface PartyReturnNote {
+  id: string
+  kind: 'CREDIT' | 'DEBIT'
+  number: string
+  date: string
+  /** Remaining party effect after source-invoice settlement, if any. */
+  partyBalanceEffectAmount: number
+  status: string
+  sourceInvoiceId: string
+  sourceInvoiceNumber: string
+  settlementMethod: string
+}
+
 export interface PartyPayment {
   id: string
   direction: PaymentDirection
@@ -72,5 +85,9 @@ export interface PartyPayment {
 export interface PartyActivity {
   salesInvoices: PartyInvoiceBalance[]
   purchaseInvoices: PartyInvoiceBalance[]
+  /** Credit notes reduce customer receivables or create a customer payable. */
+  creditNotes: PartyReturnNote[]
+  /** Debit notes reduce supplier payables or create a supplier receivable. */
+  debitNotes: PartyReturnNote[]
   payments: PartyPayment[]
 }

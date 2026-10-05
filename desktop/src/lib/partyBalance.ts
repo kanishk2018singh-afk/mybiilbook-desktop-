@@ -5,6 +5,10 @@ export interface PartyBalanceBreakdown {
   openingSigned: number
   salesInvoiceBalance: number
   purchaseInvoiceBalance: number
+  /** Unapplied credit notes are amounts the showroom owes the customer. */
+  creditNoteBalance: number
+  /** Unapplied debit notes are amounts the supplier owes the showroom. */
+  debitNoteBalance: number
   unallocatedMoneyIn: number
   unallocatedMoneyOut: number
   currentSigned: number
@@ -32,6 +36,8 @@ function roundMoney(value: number): number {
  *   opening PAYABLE          => - openingBalance
  *   sales invoice balance    => + (customer still owes us)
  *   purchase invoice balance => - (we still owe supplier)
+ *   unapplied credit note    => - (we owe the customer / customer credit)
+ *   unapplied debit note     => + (supplier owes us / supplier debit)
  *   unallocated IN payment   => - (customer payment reduces receivable)
  *   unallocated OUT payment  => + (supplier payment reduces payable)
  */
@@ -43,6 +49,12 @@ export function calculatePartyBalance(party: Party, activity: PartyActivity): Pa
   const purchaseInvoiceBalance = activity.purchaseInvoices
     .filter((invoice) => invoice.status !== 'CANCELLED')
     .reduce((total, invoice) => total + invoice.balanceAmount, 0)
+  const creditNoteBalance = activity.creditNotes
+    .filter((note) => note.status !== 'CANCELLED')
+    .reduce((total, note) => total + note.partyBalanceEffectAmount, 0)
+  const debitNoteBalance = activity.debitNotes
+    .filter((note) => note.status !== 'CANCELLED')
+    .reduce((total, note) => total + note.partyBalanceEffectAmount, 0)
 
   // A standalone payment may be divided across multiple invoices. Only its
   // explicit on-account remainder affects the party total: linked amounts are
@@ -55,7 +67,7 @@ export function calculatePartyBalance(party: Party, activity: PartyActivity): Pa
     .reduce((total, payment) => total + onAccountAmount(payment), 0)
 
   const currentSigned = roundMoney(
-    openingSigned + salesInvoiceBalance - purchaseInvoiceBalance - unallocatedMoneyIn + unallocatedMoneyOut,
+    openingSigned + salesInvoiceBalance - purchaseInvoiceBalance - creditNoteBalance + debitNoteBalance - unallocatedMoneyIn + unallocatedMoneyOut,
   )
   const position = currentSigned > 0.005 ? 'RECEIVABLE' : currentSigned < -0.005 ? 'PAYABLE' : 'SETTLED'
 
@@ -63,6 +75,8 @@ export function calculatePartyBalance(party: Party, activity: PartyActivity): Pa
     openingSigned: roundMoney(openingSigned),
     salesInvoiceBalance: roundMoney(salesInvoiceBalance),
     purchaseInvoiceBalance: roundMoney(purchaseInvoiceBalance),
+    creditNoteBalance: roundMoney(creditNoteBalance),
+    debitNoteBalance: roundMoney(debitNoteBalance),
     unallocatedMoneyIn: roundMoney(unallocatedMoneyIn),
     unallocatedMoneyOut: roundMoney(unallocatedMoneyOut),
     currentSigned,

@@ -4984,3 +4984,434 @@ code {
     width: 100%;
   }
 }
+
+/* ---------- Credit notes and debit notes / return workflows ---------- */
+.return-note-content {
+  max-width: 1450px;
+}
+
+.return-note-source-card,
+.return-note-items-card,
+.return-note-settlement-card {
+  border: 1px solid #d8e5eb;
+  border-radius: 16px;
+  background: #fff;
+  padding: 1.05rem;
+  box-shadow: 0 8px 19px rgba(29, 70, 89, 0.045);
+}
+
+.return-note-source-card {
+  margin-top: 1.7rem;
+}
+
+.return-note-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.95rem;
+}
+
+.return-note-card-heading > div {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr);
+  column-gap: 0.65rem;
+}
+
+.return-note-card-heading h2 {
+  margin: 0;
+  color: #244758;
+  font-size: 0.95rem;
+}
+
+.return-note-card-heading p {
+  grid-column: 2;
+  margin: 0.2rem 0 0;
+  color: #718895;
+  font-size: 0.7rem;
+  line-height: 1.48;
+}
+
+.return-note-source-grid,
+.return-refund-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(155px, 0.42fr);
+  gap: 0.8rem;
+}
+
+.return-source-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.9rem;
+}
+
+.return-source-summary article {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+  border: 1px solid #dce9ed;
+  border-radius: 10px;
+  background: #f7fbfc;
+  padding: 0.68rem;
+}
+
+.return-source-summary span {
+  color: #6e8796;
+  font-size: 0.6rem;
+  font-weight: 810;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.return-source-summary strong {
+  overflow: hidden;
+  color: #294e60;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.return-source-summary small {
+  overflow: hidden;
+  color: #718896;
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.return-note-items-card {
+  margin-top: 1rem;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.return-note-items-card .return-note-card-heading {
+  padding: 0 0.05rem 1rem;
+}
+
+.return-note-item-count {
+  border-radius: 999px;
+  background: #e7f3f6;
+  padding: 0.32rem 0.58rem;
+  color: #397087;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.return-note-items-table {
+  width: 100%;
+  min-width: 1010px;
+  border-collapse: collapse;
+}
+
+.return-note-items-table th {
+  border-top: 1px solid #dfe9ee;
+  border-bottom: 1px solid #dfe9ee;
+  background: #f8fafb;
+  padding: 0.67rem 0.55rem;
+  color: #718999;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.return-note-items-table th:first-child,
+.return-note-items-table td:first-child {
+  min-width: 235px;
+  text-align: left;
+}
+
+.return-note-items-table td {
+  border-bottom: 1px solid #ebf1f4;
+  padding: 0.66rem 0.55rem;
+  color: #456474;
+  font-size: 0.72rem;
+  text-align: right;
+  vertical-align: middle;
+}
+
+.return-note-items-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.return-note-items-table tr.return-note-invalid-row td {
+  background: #fff8f7;
+}
+
+.return-note-items-table .invoice-line-product strong {
+  display: block;
+  color: #284d5e;
+  font-size: 0.74rem;
+}
+
+.return-note-items-table .invoice-line-product small {
+  display: block;
+  max-width: 310px;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  color: #748b99;
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.return-qty-input input {
+  width: 82px;
+  min-height: 32px;
+  border: 1px solid #bfd5de;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 0.4rem;
+  color: #254a5c;
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.return-qty-input input:focus {
+  outline: 2px solid rgba(35, 132, 157, 0.16);
+  border-color: #3989a2;
+}
+
+.return-qty-error {
+  display: block;
+  margin-top: 0.18rem;
+  color: #b44c42;
+  font-size: 0.57rem;
+  text-align: right;
+}
+
+.return-note-bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 0.43fr);
+  align-items: start;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.return-note-settlement-card {
+  min-width: 0;
+}
+
+.return-settlement-options {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.return-settlement-options button {
+  display: grid;
+  gap: 0.18rem;
+  width: 100%;
+  border: 1px solid #d5e2e8;
+  border-radius: 10px;
+  background: #fbfcfd;
+  padding: 0.72rem 0.78rem;
+  color: #476777;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.return-settlement-options button:hover:not(:disabled) {
+  border-color: #9cc7d5;
+  background: #f4fbfc;
+}
+
+.return-settlement-options button.selected {
+  border-color: #4698aa;
+  background: #ebf8f8;
+  box-shadow: inset 3px 0 0 #2e8993;
+}
+
+.return-settlement-options button:disabled {
+  cursor: not-allowed;
+  opacity: 0.66;
+}
+
+.return-settlement-options strong {
+  color: #2a5061;
+  font-size: 0.75rem;
+}
+
+.return-settlement-options span {
+  color: #708895;
+  font-size: 0.66rem;
+  line-height: 1.42;
+}
+
+.return-refund-fields {
+  margin-top: 0.85rem;
+}
+
+.return-note-comment {
+  margin-top: 0.85rem;
+}
+
+.return-note-comment textarea {
+  min-height: 85px;
+}
+
+.return-note-summary {
+  position: sticky;
+  top: 1rem;
+}
+
+.return-note-integrity-copy {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.85rem;
+  border: 1px solid #cbe5da;
+  border-radius: 9px;
+  background: #eff9f5;
+  padding: 0.65rem;
+}
+
+.return-note-integrity-copy strong {
+  color: #187058;
+  font-size: 0.7rem;
+}
+
+.return-note-integrity-copy span {
+  color: #5b7d74;
+  font-size: 0.64rem;
+  line-height: 1.42;
+}
+
+.return-note-save-button,
+.return-note-reset {
+  width: 100%;
+  margin-top: 0.82rem;
+}
+
+.return-note-reset {
+  margin-top: 0.5rem;
+}
+
+.return-note-empty-state {
+  display: grid;
+  justify-items: center;
+  max-width: 650px;
+  margin: 1.4rem auto;
+  border: 1px dashed #cbdce3;
+  border-radius: 16px;
+  background: #fbfcfd;
+  padding: 2.3rem 1.4rem;
+  color: #6a8290;
+  text-align: center;
+}
+
+.return-note-empty-state > span {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 13px;
+  background: #e6f3f5;
+  color: #2e8292;
+  font-size: 1.25rem;
+}
+
+.return-note-empty-state h2 {
+  margin: 0.8rem 0 0;
+  color: #2d5263;
+  font-size: 1rem;
+}
+
+.return-note-empty-state p {
+  max-width: 480px;
+  margin: 0.4rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.return-note-success {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  border: 1px solid #b9dfcf;
+  border-radius: 12px;
+  background: #effaf4;
+  padding: 0.75rem 0.85rem;
+}
+
+.return-note-success > div {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 0.18rem;
+}
+
+.return-note-success strong {
+  color: #1b7259;
+  font-size: 0.78rem;
+}
+
+.return-note-success span {
+  color: #5a7d72;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.invoice-return-note-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid #c9d9ef;
+  border-radius: 10px;
+  background: #f2f7fd;
+  padding: 0.72rem 0.85rem;
+  color: #456c98;
+  font-size: 0.72rem;
+}
+
+.invoice-return-note-banner strong {
+  color: #2f6094;
+  font-size: 0.75rem;
+}
+
+.invoice-return-note-action {
+  width: 100%;
+}
+
+.ledger-entry-icon.credit-note {
+  background: #e7f0fb;
+  color: #4277b5;
+}
+
+.ledger-entry-icon.debit-note {
+  background: #fff2e9;
+  color: #b5682e;
+}
+
+@media (max-width: 1050px) {
+  .return-note-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .return-note-summary {
+    position: static;
+  }
+}
+
+@media (max-width: 700px) {
+  .return-note-source-grid,
+  .return-source-summary,
+  .return-refund-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .return-note-success,
+  .invoice-return-note-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .return-note-success .table-action-button,
+  .return-note-success .outline-button {
+    width: 100%;
+  }
+}

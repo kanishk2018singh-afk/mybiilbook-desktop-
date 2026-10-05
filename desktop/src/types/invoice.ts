@@ -74,6 +74,9 @@ export interface InvoiceDetail extends InvoiceListItem {
   beforeRoundOff: number
   roundOff: number
   paymentMode: string
+  /** Return-note metadata is separate from immutable invoice item snapshots. */
+  creditNoteCount: number
+  debitNoteCount: number
   createdBy: string
   cancellationReason: string
   cancelledBy: string

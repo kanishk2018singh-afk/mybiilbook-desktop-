@@ -20,6 +20,7 @@ import type {
   PartyInput,
   PartyInvoiceBalance,
   PartyPayment,
+  PartyReturnNote,
   PartyType,
   PaymentDirection,
 } from '../types/party'
@@ -88,6 +89,20 @@ function toInvoiceBalance(id: string, kind: PartyInvoiceBalance['kind'], data: D
     // `balanceAmount` is the preferred mobile contract; fallbacks support early documents during migration.
     balanceAmount: number(data.balanceAmount, number(data.balanceDue, number(data.dueAmount))),
     status: text(data.status).toUpperCase() || 'FINAL',
+  }
+}
+
+function toReturnNote(id: string, kind: PartyReturnNote['kind'], data: DocumentData): PartyReturnNote {
+  return {
+    id,
+    kind,
+    number: text(data.number) || text(data.creditNoteNumber) || text(data.debitNoteNumber) || 'Untitled return note',
+    date: date(data.date) || date(data.noteDate) || date(data.createdAt),
+    partyBalanceEffectAmount: Math.max(0, number(data.partyBalanceEffectAmount, number(data.grandTotal))),
+    status: text(data.status).toUpperCase() || 'CONFIRMED',
+    sourceInvoiceId: text(data.sourceInvoiceId),
+    sourceInvoiceNumber: text(data.sourceInvoiceNumber),
+    settlementMethod: text(data.settlementMethod),
   }
 }
 
@@ -171,17 +186,19 @@ export function subscribeToPartyActivity(
   const database = requireFirestore()
   let salesInvoices: PartyInvoiceBalance[] = []
   let purchaseInvoices: PartyInvoiceBalance[] = []
+  let creditNotes: PartyReturnNote[] = []
+  let debitNotes: PartyReturnNote[] = []
   let payments: PartyPayment[] = []
-  const initializedSources = new Set<'sales' | 'purchases' | 'payments'>()
+  const initializedSources = new Set<'sales' | 'purchases' | 'creditNotes' | 'debitNotes' | 'payments'>()
 
-  // Wait for all three initial snapshots so the first balance is not briefly
-  // rendered from just one collection. Every later source update emits live.
-  const emit = (source: 'sales' | 'purchases' | 'payments') => {
+  // Wait for all initial snapshots so the first balance is not briefly rendered
+  // without a return note or payment source. Every later source update is live.
+  const emit = (source: 'sales' | 'purchases' | 'creditNotes' | 'debitNotes' | 'payments') => {
     initializedSources.add(source)
-    if (initializedSources.size === 3) onActivity({ salesInvoices, purchaseInvoices, payments })
+    if (initializedSources.size === 5) onActivity({ salesInvoices, purchaseInvoices, creditNotes, debitNotes, payments })
   }
   const watch = <T>(
-    source: 'sales' | 'purchases' | 'payments',
+    source: 'sales' | 'purchases' | 'creditNotes' | 'debitNotes' | 'payments',
     reference: ReturnType<typeof collection>,
     map: (id: string, data: DocumentData) => T,
     set: (items: T[]) => void,
@@ -206,6 +223,18 @@ export function subscribeToPartyActivity(
     (id, data) => toInvoiceBalance(id, 'PURCHASE', data),
     (items) => { purchaseInvoices = items },
   )
+  const unsubscribeCreditNotes = watch(
+    'creditNotes',
+    collection(database, getBusinessPath(uid, businessId, 'creditNotes')),
+    (id, data) => toReturnNote(id, 'CREDIT', data),
+    (items) => { creditNotes = items },
+  )
+  const unsubscribeDebitNotes = watch(
+    'debitNotes',
+    collection(database, getBusinessPath(uid, businessId, 'debitNotes')),
+    (id, data) => toReturnNote(id, 'DEBIT', data),
+    (items) => { debitNotes = items },
+  )
   const unsubscribePayments = watch(
     'payments',
     collection(database, getBusinessPath(uid, businessId, 'payments')),
@@ -216,6 +245,8 @@ export function subscribeToPartyActivity(
   return () => {
     unsubscribeSales()
     unsubscribePurchases()
+    unsubscribeCreditNotes()
+    unsubscribeDebitNotes()
     unsubscribePayments()
   }
 }

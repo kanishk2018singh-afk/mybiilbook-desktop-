@@ -12,6 +12,7 @@ interface InvoiceDetailScreenProps {
   invoiceId: string
   onNavigate: (page: DesktopPage) => void
   onBack: () => void
+  onCreateReturnNote: (kind: InvoiceKind, invoiceId: string) => void
 }
 
 function money(value: number): string {
@@ -47,7 +48,7 @@ function itemTaxableAmount(item: InvoiceDetail['items'][number]): number {
     : item.taxableAfterBillDiscount
 }
 
-export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack }: InvoiceDetailScreenProps) {
+export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack, onCreateReturnNote }: InvoiceDetailScreenProps) {
   const { user, signOut } = useAuth()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null)
@@ -113,6 +114,7 @@ export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack }: Inv
 
   const title = `${invoiceKindLabel(kind)} invoice`
   const partyLabel = invoicePartyLabel(kind)
+  const returnNoteCount = invoice ? (kind === 'SALE' ? invoice.creditNoteCount : invoice.debitNoteCount) : 0
 
   if (!isLoading && !loadError && !invoice) {
     return (
@@ -163,6 +165,7 @@ export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack }: Inv
               </section>
 
               {invoice.status === 'CANCELLED' ? <section className="invoice-cancelled-banner"><strong>Cancelled on {dateLabel(invoice.cancelledAt)}</strong><span>{invoice.cancellationReason ? `Reason: ${invoice.cancellationReason}` : 'No cancellation reason recorded.'}</span></section> : null}
+              {invoice.status === 'CONFIRMED' && returnNoteCount > 0 ? <section className="invoice-return-note-banner"><strong>{returnNoteCount} {kind === 'SALE' ? 'credit' : 'debit'} note{returnNoteCount === 1 ? '' : 's'} posted</strong><span>The original item snapshots remain immutable. Cancellation is locked because a full reversal would double-post returned inventory.</span></section> : null}
 
               <section className="invoice-detail-card">
                 <div className="invoice-detail-card-heading"><div><span className="invoice-step">01</span><h2>{partyLabel} snapshot</h2></div></div>
@@ -203,10 +206,15 @@ export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack }: Inv
 
               <section className="invoice-integrity-note">
                 <span aria-hidden="true">⌘</span>
-                <div><strong>{invoice.status === 'DRAFT' ? 'Draft-only editing' : 'Posted invoices are immutable'}</strong><p>{invoice.status === 'DRAFT' ? 'Only a DRAFT may be edited before it posts stock, GST totals, and payments.' : 'CONFIRMED invoices cannot be edited because changing posted lines would break stock and accounting integrity. Cancel the invoice to post the exact reverse stock adjustment, then issue a replacement.'}</p></div>
+                <div><strong>{invoice.status === 'DRAFT' ? 'Draft-only editing' : returnNoteCount > 0 ? 'Return-note protected invoice' : 'Posted invoices are immutable'}</strong><p>{invoice.status === 'DRAFT' ? 'Only a DRAFT may be edited before it posts stock, GST totals, and payments.' : returnNoteCount > 0 ? 'Returned quantities are preserved through separate audited note and stock entries. Full cancellation is locked because it would duplicate the original stock reversal.' : 'CONFIRMED invoices cannot be edited because changing posted lines would break stock and accounting integrity. Cancel the invoice to post the exact reverse stock adjustment, then issue a replacement.'}</p></div>
               </section>
 
-              {invoice.status === 'CONFIRMED' ? <button className="danger-action-button" type="button" onClick={openCancelDialog}>Cancel invoice &amp; reverse stock</button> : null}
+              {invoice.status === 'CONFIRMED' ? <>
+                <button className="outline-button invoice-return-note-action" type="button" onClick={() => onCreateReturnNote(kind, invoice.id)}>{kind === 'SALE' ? 'Create credit note / sales return' : 'Create debit note / purchase return'}</button>
+                {returnNoteCount > 0
+                  ? <div className="invoice-detail-locked">Cancellation is locked after return notes are posted. This protects the inventory audit trail from a duplicate full reversal.</div>
+                  : <button className="danger-action-button" type="button" onClick={openCancelDialog}>Cancel invoice &amp; reverse stock</button>}
+              </> : null}
               {invoice.status === 'CANCELLED' ? <div className="invoice-detail-locked">This invoice is cancelled and remains read-only for audit history.</div> : null}
             </aside>
           </div>

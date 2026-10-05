@@ -43,7 +43,7 @@ npm run dist
 3. Copy the Web app's `firebaseConfig` fields to `desktop/.env`.
 4. In **Authentication → Sign-in method**, enable **Google**.
 5. In **Authentication → Settings → Authorized domains**, add `localhost` and `127.0.0.1` for local/Electron development. The packaged desktop app serves its renderer over a loopback HTTP origin because Firebase's browser Auth SDK does not support `file://` OAuth.
-6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, `stockTransactions`, `parties`, `salesInvoices`, `purchaseInvoices`, invoice `items`, `payments`, and `invoicePayments` documents used by invoice workflows.
+6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, `stockTransactions`, `parties`, `salesInvoices`, `purchaseInvoices`, invoice `items`, `payments`, `invoicePayments`, `creditNotes`, `debitNotes`, their `items` documents, and source-invoice `returnBalances` documents used by invoice/return workflows.
 
 Example development rule shape:
 
@@ -53,7 +53,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, and Sales/Purchase Invoice confirmation or cancellation are the limited write operations added so far.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, Sales/Purchase Invoice confirmation or cancellation, and Credit/Debit Note return posting are the limited write operations added so far.
 
 ## Data flow
 
@@ -291,3 +291,29 @@ Only an **ACCEPTED** quotation exposes **Convert to Sales Invoice**. It copies t
 ```
 
 If stock validation or any write fails, no Sales Invoice is created and the quotation remains accepted and convertible. Firestore rules must grant the signed-in owner access to the business-scoped `quotations` collection and its `items` subcollections in addition to the existing invoice collections.
+
+## Credit Notes, Debit Notes, and returns
+
+**Credit notes** are sales returns and select a confirmed Sales Invoice. **Debit notes** are purchase returns and select a confirmed Purchase Invoice. The form only lets the operator choose source-item quantities; it calculates taxable value, GST, and return totals from the immutable source item snapshots rather than current product prices or tax settings.
+
+`createConfirmedReturnNote()` posts each note in one Firestore transaction:
+
+```text
+1. reads the confirmed source invoice, selected immutable items, per-item return balances, and products
+2. prevents a cumulative return quantity above the original source-item quantity
+3. reserves the CREDIT_NOTE or DEBIT_NOTE number
+4. writes creditNotes/{id} or debitNotes/{id} plus immutable items snapshots
+5. updates product stock and writes SALE_RETURN or PURCHASE_RETURN stockTransactions
+6. optionally lowers the source invoice balance, or writes the matching refund payment
+7. writes separate source-invoice returnBalances documents and source audit metadata
+```
+
+A Credit Note adds inventory; a Debit Note removes inventory and aborts if the required returned stock is no longer available. The original invoice item snapshots remain immutable. Once a source invoice has return notes, full invoice cancellation is intentionally blocked because a full cancellation would otherwise double-post stock reversal.
+
+Settlement choices are explicit:
+
+- **Apply to source invoice** reduces its remaining balance, when the note does not exceed that balance.
+- **Refund payment** creates an `OUT` customer refund for a Credit Note or an `IN` supplier refund for a Debit Note.
+- **Leave on account** retains the return as a party credit/debit.
+
+The Party Ledger includes credit/debit-note effects, so on-account notes and their refund payments remain balanced. Firestore rules must permit the business-scoped `creditNotes`, `debitNotes`, their `items` subcollections, source-invoice `returnBalances` subcollections, and the existing products, stockTransactions, payments, and invoice collections.

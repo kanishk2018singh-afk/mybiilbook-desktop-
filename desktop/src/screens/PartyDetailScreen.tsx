@@ -12,7 +12,7 @@ interface PartyDetailScreenProps {
   onBack: () => void
 }
 
-const EMPTY_ACTIVITY: PartyActivity = { salesInvoices: [], purchaseInvoices: [], payments: [] }
+const EMPTY_ACTIVITY: PartyActivity = { salesInvoices: [], purchaseInvoices: [], creditNotes: [], debitNotes: [], payments: [] }
 
 function money(value: number): string {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value)
@@ -39,7 +39,7 @@ interface LedgerEntry {
   label: string
   detail: string
   signedAmount: number
-  kind: 'sale' | 'purchase' | 'payment-in' | 'payment-out'
+  kind: 'sale' | 'purchase' | 'credit-note' | 'debit-note' | 'payment-in' | 'payment-out'
   isAllocated?: boolean
 }
 
@@ -59,6 +59,22 @@ function toLedgerEntries(activity: PartyActivity): LedgerEntry[] {
     detail: 'Purchase invoice balance',
     signedAmount: invoice.status === 'CANCELLED' ? 0 : -invoice.balanceAmount,
     kind: 'purchase',
+  }))
+  const creditNotes: LedgerEntry[] = activity.creditNotes.map((note) => ({
+    id: `credit-note-${note.id}`,
+    date: note.date,
+    label: note.number,
+    detail: note.settlementMethod === 'APPLY_TO_INVOICE' ? `Credit note applied to ${note.sourceInvoiceNumber || 'source invoice'}` : `Credit note from ${note.sourceInvoiceNumber || 'source invoice'}`,
+    signedAmount: note.status === 'CANCELLED' ? 0 : -note.partyBalanceEffectAmount,
+    kind: 'credit-note',
+  }))
+  const debitNotes: LedgerEntry[] = activity.debitNotes.map((note) => ({
+    id: `debit-note-${note.id}`,
+    date: note.date,
+    label: note.number,
+    detail: note.settlementMethod === 'APPLY_TO_INVOICE' ? `Debit note applied to ${note.sourceInvoiceNumber || 'source invoice'}` : `Debit note from ${note.sourceInvoiceNumber || 'source invoice'}`,
+    signedAmount: note.status === 'CANCELLED' ? 0 : note.partyBalanceEffectAmount,
+    kind: 'debit-note',
   }))
   const payments: LedgerEntry[] = activity.payments.map((payment) => {
     const onAccountAmount = typeof payment.unallocatedAmount === 'number'
@@ -85,7 +101,7 @@ function toLedgerEntries(activity: PartyActivity): LedgerEntry[] {
       isAllocated: allocatedAmount > 0.005 && onAccountAmount <= 0.005,
     }
   })
-  return [...sales, ...purchases, ...payments].sort((left, right) => activityTimestamp(right.date) - activityTimestamp(left.date))
+  return [...sales, ...purchases, ...creditNotes, ...debitNotes, ...payments].sort((left, right) => activityTimestamp(right.date) - activityTimestamp(left.date))
 }
 
 export function PartyDetailScreen({ partyId, onNavigate, onBack }: PartyDetailScreenProps) {
@@ -192,6 +208,8 @@ export function PartyDetailScreen({ partyId, onNavigate, onBack }: PartyDetailSc
               <article><span>Opening balance</span><strong className={balance.openingSigned >= 0 ? 'positive' : 'negative'}>{signedMoney(balance.openingSigned)}</strong><small>{party.openingBalanceType.toLowerCase()}</small></article>
               <article><span>Sales invoice balances</span><strong className="positive">+{money(balance.salesInvoiceBalance)}</strong><small>Outstanding customer invoices</small></article>
               <article><span>Purchase invoice balances</span><strong className="negative">−{money(balance.purchaseInvoiceBalance)}</strong><small>Outstanding supplier invoices</small></article>
+              <article><span>Credit notes</span><strong className="negative">−{money(balance.creditNoteBalance)}</strong><small>Customer credits not applied to an invoice</small></article>
+              <article><span>Debit notes</span><strong className="positive">+{money(balance.debitNoteBalance)}</strong><small>Supplier debits not applied to an invoice</small></article>
               <article><span>On-account money received</span><strong className="negative">−{money(balance.unallocatedMoneyIn)}</strong><small>Reduces receivable</small></article>
               <article><span>On-account money paid</span><strong className="positive">+{money(balance.unallocatedMoneyOut)}</strong><small>Reduces payable</small></article>
             </section>
@@ -199,7 +217,7 @@ export function PartyDetailScreen({ partyId, onNavigate, onBack }: PartyDetailSc
             <section className="balance-logic-note">
               <strong>How this balance is calculated</strong>
               <p>
-                Positive amounts are receivables; negative amounts are payables. The calculation starts with the signed opening balance, adds remaining sales invoice <code>balanceAmount</code>, subtracts remaining purchase invoice <code>balanceAmount</code>, subtracts unallocated money received, and adds unallocated money paid. Payments linked to an invoice are excluded because the invoice’s remaining balance already reflects them.
+                Positive amounts are receivables; negative amounts are payables. The calculation starts with the signed opening balance, adds remaining sales invoice <code>balanceAmount</code>, subtracts remaining purchase invoice <code>balanceAmount</code>, subtracts on-account credit notes, adds on-account debit notes, subtracts unallocated money received, and adds unallocated money paid. Notes applied directly to an invoice are already reflected in that invoice’s balance. Payments linked to an invoice are excluded because the invoice’s remaining balance already reflects them.
               </p>
             </section>
 
@@ -209,13 +227,13 @@ export function PartyDetailScreen({ partyId, onNavigate, onBack }: PartyDetailSc
                 <div className="party-ledger-list">
                   {ledgerEntries.map((entry) => (
                     <div className="party-ledger-row" key={entry.id}>
-                      <span className={`ledger-entry-icon ${entry.kind}`} aria-hidden="true">{entry.kind === 'sale' ? '↗' : entry.kind === 'purchase' ? '↙' : entry.kind === 'payment-in' ? '↓' : '↑'}</span>
+                      <span className={`ledger-entry-icon ${entry.kind}`} aria-hidden="true">{entry.kind === 'sale' ? '↗' : entry.kind === 'purchase' ? '↙' : entry.kind === 'credit-note' ? '↩' : entry.kind === 'debit-note' ? '↪' : entry.kind === 'payment-in' ? '↓' : '↑'}</span>
                       <div className="ledger-entry-copy"><strong>{entry.label}</strong><small>{dateLabel(entry.date)} · {entry.detail}{entry.isAllocated ? ' · already reflected in invoice balance' : ''}</small></div>
                       <span className={`ledger-entry-amount ${entry.signedAmount >= 0 ? 'positive' : 'negative'}`}>{signedMoney(entry.signedAmount)}</span>
                     </div>
                   ))}
                 </div>
-              ) : <div className="ledger-empty">No sales, purchases, or payment entries are linked to this party yet.</div>}
+              ) : <div className="ledger-empty">No sales, purchases, return notes, or payment entries are linked to this party yet.</div>}
             </section>
           </>
         ) : null}

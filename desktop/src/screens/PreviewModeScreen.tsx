@@ -41,6 +41,14 @@ const pageCopy: Partial<Record<DesktopPage, { title: string; description: string
     title: 'Purchase invoices',
     description: 'The live purchase register, filters, details, PDF export, and cancellation workflow will appear here after authentication is re-enabled.',
   },
+  creditNote: {
+    title: 'Create credit note',
+    description: 'The sales-return item selector, GST refund calculation, stock restoration, and optional customer refund workflow will appear here after authentication is re-enabled.',
+  },
+  debitNote: {
+    title: 'Create debit note',
+    description: 'The purchase-return item selector, GST calculation, stock reduction, and optional supplier refund workflow will appear here after authentication is re-enabled.',
+  },
   payments: {
     title: 'Payments',
     description: 'The payment register and its date, party, direction, and mode filters will appear here after authentication is re-enabled.',
