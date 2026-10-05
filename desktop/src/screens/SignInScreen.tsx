@@ -3,7 +3,9 @@ import { GoogleIcon } from '../components/GoogleIcon'
 import { useAuth } from '../context/AuthContext'
 
 export function SignInScreen() {
-  const { signInWithGoogle, isSigningIn, error } = useAuth()
+  const { signInWithGoogle, signInWithGoogleRedirect, isSigningIn, error } = useAuth()
+  const popupWasBlocked = error?.startsWith('The Google sign-in window was blocked.') ?? false
+  const isDesktopApp = typeof window !== 'undefined' && Boolean(window.desktop)
 
   return (
     <main className="auth-layout">
@@ -21,6 +23,22 @@ export function SignInScreen() {
         </button>
 
         {error ? <p className="inline-error" role="alert">{error}</p> : null}
+
+        {popupWasBlocked && !isDesktopApp ? (
+          <div className="auth-redirect-fallback">
+            <p>
+              This embedded preview can block pop-up windows. Redirect sign-in opens Google in the current browser instead.
+            </p>
+            <button
+              className="secondary-button auth-redirect-button"
+              type="button"
+              onClick={() => void signInWithGoogleRedirect()}
+              disabled={isSigningIn}
+            >
+              Continue with Google using redirect
+            </button>
+          </div>
+        ) : null}
 
         <p className="security-note">
           <span aria-hidden="true">⌁</span>
