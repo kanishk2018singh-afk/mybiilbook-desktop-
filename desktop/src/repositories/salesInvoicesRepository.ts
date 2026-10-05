@@ -24,6 +24,9 @@ export type SalesInvoiceTransactionErrorCode =
   | 'PAID_AMOUNT_INVALID'
   | 'PRODUCT_NOT_FOUND'
   | 'INSUFFICIENT_STOCK'
+  | 'QUOTATION_NOT_FOUND'
+  | 'QUOTATION_NOT_ACCEPTED'
+  | 'QUOTATION_PARTY_MISMATCH'
 
 export class SalesInvoiceTransactionError extends Error {
   constructor(
@@ -33,6 +36,10 @@ export class SalesInvoiceTransactionError extends Error {
     super(message)
     this.name = 'SalesInvoiceTransactionError'
   }
+}
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function nonNegativeFinite(value: number): boolean {
@@ -90,6 +97,9 @@ function assertInput(input: CreateSalesInvoiceInput): void {
   if (!nonNegativeFinite(input.paidAmount)) {
     throw new SalesInvoiceTransactionError('PAID_AMOUNT_INVALID', 'Enter a valid non-negative Paid Now amount.')
   }
+  if (input.sourceQuotation && !input.sourceQuotation.quotationId.trim()) {
+    throw new SalesInvoiceTransactionError('QUOTATION_NOT_FOUND', 'The quotation selected for conversion is invalid.')
+  }
 }
 
 /**
@@ -120,6 +130,9 @@ export async function createConfirmedSalesInvoice(
 
   const database = requireFirestore()
   const invoiceRef = doc(collection(database, getBusinessPath(uid, businessId, 'salesInvoices')))
+  const quotationRef = input.sourceQuotation
+    ? doc(database, getBusinessPath(uid, businessId, 'quotations'), input.sourceQuotation.quotationId)
+    : null
   const itemRefs = input.lines.map(() => doc(collection(invoiceRef, 'items')))
   const paymentRef = totals.paidAmount > 0 ? doc(collection(database, getBusinessPath(uid, businessId, 'payments'))) : null
   const invoicePaymentRef = totals.paidAmount > 0 ? doc(collection(database, getBusinessPath(uid, businessId, 'invoicePayments'))) : null
@@ -133,9 +146,24 @@ export async function createConfirmedSalesInvoice(
   return runTransaction(database, async (transaction) => {
     // All reads happen before the number helper starts writing the sequence.
     // Firestore requires this ordering inside a transaction.
-    const productEntries = await Promise.all(
-      [...productRefs.entries()].map(async ([productId, reference]) => [productId, reference, await transaction.get(reference)] as const),
-    )
+    const [quotationSnapshot, productEntries] = await Promise.all([
+      quotationRef ? transaction.get(quotationRef) : Promise.resolve(null),
+      Promise.all(
+        [...productRefs.entries()].map(async ([productId, reference]) => [productId, reference, await transaction.get(reference)] as const),
+      ),
+    ])
+    if (quotationRef) {
+      if (!quotationSnapshot?.exists()) {
+        throw new SalesInvoiceTransactionError('QUOTATION_NOT_FOUND', 'The source quotation no longer exists.')
+      }
+      const sourceQuotation = quotationSnapshot.data()
+      if (text(sourceQuotation.status).toUpperCase() !== 'ACCEPTED') {
+        throw new SalesInvoiceTransactionError('QUOTATION_NOT_ACCEPTED', 'Only an accepted quotation can be converted to a Sales Invoice.')
+      }
+      if (text(sourceQuotation.partyId) !== input.partyId) {
+        throw new SalesInvoiceTransactionError('QUOTATION_PARTY_MISMATCH', 'The quotation customer changed. Reload the quotation before converting it.')
+      }
+    }
     const products = new Map(productEntries.map(([productId, reference, snapshot]) => [productId, { reference, snapshot }]))
 
     const requestedByProduct = new Map<string, number>()
@@ -199,6 +227,10 @@ export async function createConfirmedSalesInvoice(
       paidAmount: totals.paidAmount,
       balanceAmount: totals.balanceAmount,
       paymentStatus: totals.paymentStatus,
+      ...(input.sourceQuotation ? {
+        sourceQuotationId: input.sourceQuotation.quotationId,
+        sourceQuotationNumber: input.sourceQuotation.quotationNumber.trim(),
+      } : {}),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       createdBy: uid,
@@ -292,6 +324,19 @@ export async function createConfirmedSalesInvoice(
         status: 'APPLIED',
         createdAt: serverTimestamp(),
         createdBy: uid,
+      })
+    }
+
+    if (quotationRef && input.sourceQuotation) {
+      // This update is part of the same stock-safe sales transaction. A failed
+      // stock check or invoice write therefore leaves the quote unconverted.
+      transaction.update(quotationRef, {
+        status: 'CONVERTED',
+        salesInvoiceId: invoiceRef.id,
+        salesInvoiceNumber: invoiceNumber,
+        convertedAt: serverTimestamp(),
+        convertedBy: uid,
+        updatedAt: serverTimestamp(),
       })
     }
 

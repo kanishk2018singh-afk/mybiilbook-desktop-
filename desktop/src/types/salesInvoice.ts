@@ -62,6 +62,11 @@ export interface SalesInvoicePartySnapshot {
   partyStateCode: string
 }
 
+export interface SalesInvoiceQuotationSource {
+  quotationId: string
+  quotationNumber: string
+}
+
 export interface CreateSalesInvoiceInput extends SalesInvoicePartySnapshot {
   invoiceDate: string
   businessStateCode: string
@@ -70,6 +75,8 @@ export interface CreateSalesInvoiceInput extends SalesInvoicePartySnapshot {
   billDiscount: number
   paidAmount: number
   paymentMode: PaymentMode
+  /** Present only when this invoice was drafted from an accepted quotation. */
+  sourceQuotation?: SalesInvoiceQuotationSource
 }
 
 export interface CreatedSalesInvoice {

@@ -25,6 +25,14 @@ const pageCopy: Partial<Record<DesktopPage, { title: string; description: string
     title: 'Parties',
     description: 'Customer and supplier balances will appear here after authentication is re-enabled.',
   },
+  quotations: {
+    title: 'Quotations',
+    description: 'Customer quotation creation, lifecycle tracking, and stock-safe sales conversion will appear here after authentication is re-enabled.',
+  },
+  quotation: {
+    title: 'Create quotation',
+    description: 'The quotation line-item form will appear here after authentication is re-enabled.',
+  },
   salesInvoices: {
     title: 'Sales invoices',
     description: 'The live sales register, filters, details, PDF export, and cancellation workflow will appear here after authentication is re-enabled.',

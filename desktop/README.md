@@ -273,3 +273,21 @@ users/{uid}/businesses/{businessId}/invoicePayments/{linkId}  (one per allocatio
 and update every affected invoice header's `paidAmount`, `balanceAmount`, and `paymentStatus`. A standalone payment stores `allocatedAmount`, `unallocatedAmount`, and `allocationCount`; Party Balance calculations use only `unallocatedAmount` because allocated amounts are already included in the invoice's reduced `balanceAmount`. This prevents a multi-invoice payment from being double counted.
 
 Invoice cancellation preserves the same invariant. Cancelling an invoice releases only that payment link's amount from a split standalone payment into its `unallocatedAmount`; allocations to the payment's other invoices remain intact.
+
+## Quotations and Sales Invoice conversion
+
+The **Quotations** register creates customer offers without posting inventory or payment effects. A quotation reserves the `QUOTATION` document sequence and writes its header plus immutable `items` snapshots in one Firestore transaction, but does **not** read/update product stock or create payment records.
+
+Supported statuses are `DRAFT`, `SENT`, `ACCEPTED`, `REJECTED`, `EXPIRED`, and `CONVERTED`. The detail page provides the customer-response workflow; terminal rejected/expired/converted records cannot be moved back into the sales workflow. `CONVERTED` is reserved for the Sales Invoice transaction and cannot be selected manually.
+
+Only an **ACCEPTED** quotation exposes **Convert to Sales Invoice**. It copies the quotation's customer and item snapshots into a new Sales Invoice draft. On confirmation, `createConfirmedSalesInvoice()` transaction-reads the source quotation along with products, verifies that it is still accepted and belongs to the selected customer, then atomically:
+
+```text
+1. reserves the SALE number
+2. validates and decrements product stock
+3. writes the confirmed Sales Invoice, immutable items, and SALE stock ledger rows
+4. writes an optional Paid Now payment/link
+5. marks the source quotation CONVERTED with salesInvoiceId and salesInvoiceNumber
+```
+
+If stock validation or any write fails, no Sales Invoice is created and the quotation remains accepted and convertible. Firestore rules must grant the signed-in owner access to the business-scoped `quotations` collection and its `items` subcollections in addition to the existing invoice collections.

@@ -16,16 +16,21 @@ import { SalesInvoiceScreen } from './screens/SalesInvoiceScreen'
 import { PurchaseInvoiceScreen } from './screens/PurchaseInvoiceScreen'
 import { InvoiceListScreen } from './screens/InvoiceListScreen'
 import { InvoiceDetailScreen } from './screens/InvoiceDetailScreen'
+import { QuotationScreen } from './screens/QuotationScreen'
+import { QuotationListScreen } from './screens/QuotationListScreen'
+import { QuotationDetailScreen } from './screens/QuotationDetailScreen'
 import { PaymentsListScreen } from './screens/PaymentsListScreen'
 import { RecordPaymentScreen } from './screens/RecordPaymentScreen'
 import type { InvoiceKind } from './types/invoice'
+import type { QuotationConversionDraft, QuotationDetail } from './types/quotation'
+import { quotationToSalesInvoiceDraft } from './repositories/quotationsRepository'
 import { EmptyBusinessesScreen } from './screens/EmptyBusinessesScreen'
 import { FirebaseSetupScreen } from './screens/FirebaseSetupScreen'
 import { LoadingScreen } from './screens/LoadingScreen'
 import { SignInScreen } from './screens/SignInScreen'
 import { PreviewModeScreen } from './screens/PreviewModeScreen'
 
-type AppRoute = DesktopPage | 'partyDetail' | 'invoiceDetail'
+type AppRoute = DesktopPage | 'partyDetail' | 'invoiceDetail' | 'quotationDetail'
 
 export default function App() {
   const { user, status } = useAuth()
@@ -33,12 +38,16 @@ export default function App() {
   const [page, setPage] = useState<AppRoute>('overview')
   const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null)
   const [selectedInvoice, setSelectedInvoice] = useState<{ kind: InvoiceKind; id: string } | null>(null)
+  const [selectedQuotationId, setSelectedQuotationId] = useState<string | null>(null)
+  const [quotationConversion, setQuotationConversion] = useState<QuotationConversionDraft | null>(null)
 
   // A setting belongs to a business. Never carry a page from one showroom into another.
   useEffect(() => {
     setPage('overview')
     setSelectedPartyId(null)
     setSelectedInvoice(null)
+    setSelectedQuotationId(null)
+    setQuotationConversion(null)
   }, [selectedBusinessId])
 
   // Preview Mode is deliberately isolated from live Firebase access so the UI can
@@ -56,7 +65,10 @@ export default function App() {
   if (businesses.length === 0) return <EmptyBusinessesScreen />
   if (!selectedBusinessId) return <BusinessPickerScreen />
 
-  const navigate = (target: DesktopPage) => setPage(target)
+  const navigate = (target: DesktopPage) => {
+    if (target !== 'salesInvoice') setQuotationConversion(null)
+    setPage(target)
+  }
   const openInvoice = (kind: InvoiceKind, id: string) => {
     setSelectedInvoice({ kind, id })
     setPage('invoiceDetail')
@@ -67,13 +79,33 @@ export default function App() {
   if (page === 'products') return <ProductsScreen onNavigate={navigate} />
   if (page === 'salesInvoices') return <InvoiceListScreen kind="SALE" onNavigate={navigate} onOpenInvoice={openInvoice} />
   if (page === 'purchaseInvoices') return <InvoiceListScreen kind="PURCHASE" onNavigate={navigate} onOpenInvoice={openInvoice} />
-  if (page === 'salesInvoice') return <SalesInvoiceScreen onNavigate={navigate} onOpenInvoice={(id) => openInvoice('SALE', id)} />
+  if (page === 'quotation') return <QuotationScreen onNavigate={navigate} onOpenQuotation={(id) => { setSelectedQuotationId(id); setPage('quotationDetail') }} />
+  if (page === 'quotations') return <QuotationListScreen onNavigate={navigate} onOpenQuotation={(id) => { setSelectedQuotationId(id); setPage('quotationDetail') }} />
+  if (page === 'salesInvoice') return <SalesInvoiceScreen
+    onNavigate={navigate}
+    onOpenInvoice={(id) => openInvoice('SALE', id)}
+    quotationConversion={quotationConversion}
+    onQuotationConverted={() => setQuotationConversion(null)}
+    onCancelQuotationConversion={() => setQuotationConversion(null)}
+  />
   if (page === 'purchaseInvoice') return <PurchaseInvoiceScreen onNavigate={navigate} onOpenInvoice={(id) => openInvoice('PURCHASE', id)} />
   if (page === 'parties') {
     return <PartiesScreen onNavigate={navigate} onOpenParty={(partyId) => { setSelectedPartyId(partyId); setPage('partyDetail') }} />
   }
   if (page === 'partyDetail' && selectedPartyId) {
     return <PartyDetailScreen partyId={selectedPartyId} onNavigate={navigate} onBack={() => setPage('parties')} />
+  }
+  if (page === 'quotationDetail' && selectedQuotationId) {
+    return <QuotationDetailScreen
+      quotationId={selectedQuotationId}
+      onNavigate={navigate}
+      onBack={() => { setSelectedQuotationId(null); setPage('quotations') }}
+      onConvertToSalesInvoice={(quotation: QuotationDetail) => {
+        setQuotationConversion(quotationToSalesInvoiceDraft(quotation))
+        setPage('salesInvoice')
+      }}
+      onOpenInvoice={(invoiceId) => openInvoice('SALE', invoiceId)}
+    />
   }
   if (page === 'invoiceDetail' && selectedInvoice) {
     return <InvoiceDetailScreen

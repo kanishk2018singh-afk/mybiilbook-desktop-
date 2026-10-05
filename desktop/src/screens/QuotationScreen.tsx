@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
@@ -11,28 +11,16 @@ import {
 import { searchableProductText } from '../lib/productUtils'
 import { subscribeToParties } from '../repositories/partiesRepository'
 import { subscribeToProducts } from '../repositories/productsRepository'
-import { createConfirmedSalesInvoice } from '../repositories/salesInvoicesRepository'
+import { createQuotation } from '../repositories/quotationsRepository'
 import type { Party } from '../types/party'
 import type { Product } from '../types/product'
-import type { CreatedSalesInvoice, PaymentMode, SalesInvoiceLine } from '../types/salesInvoice'
-import type { QuotationConversionDraft } from '../types/quotation'
+import type { SalesInvoiceLine } from '../types/salesInvoice'
+import type { CreatedQuotation, QuotationInitialStatus } from '../types/quotation'
 
-interface SalesInvoiceScreenProps {
+interface QuotationScreenProps {
   onNavigate: (page: DesktopPage) => void
-  onOpenInvoice: (invoiceId: string) => void
-  quotationConversion?: QuotationConversionDraft | null
-  onQuotationConverted?: () => void
-  onCancelQuotationConversion?: () => void
+  onOpenQuotation: (quotationId: string) => void
 }
-
-const PAYMENT_MODES: Array<{ value: PaymentMode; label: string }> = [
-  { value: 'CASH', label: 'Cash' },
-  { value: 'UPI', label: 'UPI' },
-  { value: 'CARD', label: 'Card' },
-  { value: 'BANK', label: 'Bank transfer' },
-  { value: 'CHEQUE', label: 'Cheque' },
-  { value: 'OTHER', label: 'Other' },
-]
 
 function money(value: number): string {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value)
@@ -49,10 +37,19 @@ function todayInIndia(): string {
   return `${part('year')}-${part('month')}-${part('day')}`
 }
 
+function defaultValidUntil(): string {
+  const date = new Date(`${todayInIndia()}T12:00:00`)
+  date.setDate(date.getDate() + 30)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function localLineId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
-    : `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    : `quotation-line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 function numberInput(value: string): number | null {
@@ -63,7 +60,7 @@ function numberInput(value: string): number | null {
 }
 
 function displayError(error: unknown): string {
-  return error instanceof Error ? error.message : 'The sales invoice could not be confirmed. Please try again.'
+  return error instanceof Error ? error.message : 'The quotation could not be saved. Please try again.'
 }
 
 function partyStateCode(party: Party | null): string {
@@ -90,19 +87,7 @@ function createLine(product: Product): SalesInvoiceLine {
   }
 }
 
-function paymentStatusLabel(status: CreatedSalesInvoice['paymentStatus']): string {
-  if (status === 'PAID') return 'Paid'
-  if (status === 'PARTIAL') return 'Partial'
-  return 'Unpaid'
-}
-
-export function SalesInvoiceScreen({
-  onNavigate,
-  onOpenInvoice,
-  quotationConversion = null,
-  onQuotationConverted,
-  onCancelQuotationConversion,
-}: SalesInvoiceScreenProps) {
+export function QuotationScreen({ onNavigate, onOpenQuotation }: QuotationScreenProps) {
   const { user, signOut } = useAuth()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [parties, setParties] = useState<Party[]>([])
@@ -112,18 +97,17 @@ export function SalesInvoiceScreen({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedParty, setSelectedParty] = useState<Party | null>(null)
   const [lines, setLines] = useState<SalesInvoiceLine[]>([])
-  const [invoiceDate, setInvoiceDate] = useState(todayInIndia)
+  const [quotationDate, setQuotationDate] = useState(todayInIndia)
+  const [validUntil, setValidUntil] = useState(defaultValidUntil)
   const [billDiscountInput, setBillDiscountInput] = useState('')
-  const [paidAmountInput, setPaidAmountInput] = useState('')
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH')
+  const [note, setNote] = useState('')
   const [partyPickerOpen, setPartyPickerOpen] = useState(false)
   const [productPickerOpen, setProductPickerOpen] = useState(false)
   const [partySearch, setPartySearch] = useState('')
   const [productSearch, setProductSearch] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [savedInvoice, setSavedInvoice] = useState<CreatedSalesInvoice | null>(null)
-  const appliedQuotationConversionId = useRef<string | null>(null)
+  const [savedQuotation, setSavedQuotation] = useState<CreatedQuotation | null>(null)
 
   useEffect(() => {
     if (!user || !selectedBusinessId) return
@@ -161,35 +145,6 @@ export function SalesInvoiceScreen({
     )
   }, [selectedBusinessId, user?.uid])
 
-  useEffect(() => {
-    if (!quotationConversion) {
-      appliedQuotationConversionId.current = null
-      return
-    }
-    if (appliedQuotationConversionId.current === quotationConversion.quotationId || partiesLoading) return
-
-    const quotationParty = parties.find((party) => party.id === quotationConversion.partyId) ?? null
-    if (!quotationParty) {
-      setSaveError(`The customer from ${quotationConversion.quotationNumber} is no longer available. Select a customer before confirming this converted invoice.`)
-      appliedQuotationConversionId.current = quotationConversion.quotationId
-      return
-    }
-
-    setSelectedParty(quotationParty)
-    setLines(quotationConversion.lines.map((line) => ({ ...line, id: localLineId() })))
-    setInvoiceDate(todayInIndia())
-    setBillDiscountInput(quotationConversion.billDiscount ? String(quotationConversion.billDiscount) : '')
-    setPaidAmountInput('')
-    setPaymentMode('CASH')
-    setPartyPickerOpen(false)
-    setProductPickerOpen(false)
-    setPartySearch('')
-    setProductSearch('')
-    setSaveError(null)
-    setSavedInvoice(null)
-    appliedQuotationConversionId.current = quotationConversion.quotationId
-  }, [parties, partiesLoading, quotationConversion])
-
   const customerParties = useMemo(
     () => parties.filter((party) => party.isActive && (party.type === 'CUSTOMER' || party.type === 'BOTH')),
     [parties],
@@ -206,7 +161,6 @@ export function SalesInvoiceScreen({
   }, [productSearch, products])
 
   const parsedBillDiscount = numberInput(billDiscountInput)
-  const parsedPaidAmount = numberInput(paidAmountInput)
   const activeBusinessStateCode = selectedBusiness ? businessStateCode(selectedBusiness) : ''
   const activePartyStateCode = partyStateCode(selectedParty)
   const jurisdiction = useMemo(
@@ -214,97 +168,84 @@ export function SalesInvoiceScreen({
     [activeBusinessStateCode, activePartyStateCode],
   )
   const totals = useMemo(
-    () => calculateSalesInvoiceTotals(lines, parsedBillDiscount ?? 0, parsedPaidAmount ?? 0, jurisdiction.isInterState),
-    [jurisdiction.isInterState, lines, parsedBillDiscount, parsedPaidAmount],
+    () => calculateSalesInvoiceTotals(lines, parsedBillDiscount ?? 0, 0, jurisdiction.isInterState),
+    [jurisdiction.isInterState, lines, parsedBillDiscount],
   )
 
   if (!user || !selectedBusiness || !selectedBusinessId) return null
-
   const isLoading = partiesLoading || productsLoading
+
+  const clearSavedState = () => {
+    setSaveError(null)
+    setSavedQuotation(null)
+  }
 
   const chooseParty = (party: Party) => {
     setSelectedParty(party)
     setPartyPickerOpen(false)
     setPartySearch('')
-    setSaveError(null)
-    setSavedInvoice(null)
+    clearSavedState()
   }
 
   const addProduct = (product: Product) => {
     setLines((current) => {
       const existing = current.find((line) => line.productId === product.id)
-      if (existing) {
-        return current.map((line) => line.id === existing.id ? { ...line, qty: Math.round((line.qty + 1) * 1000) / 1000 } : line)
-      }
+      if (existing) return current.map((line) => line.id === existing.id ? { ...line, qty: Math.round((line.qty + 1) * 1000) / 1000 } : line)
       return [...current, createLine(product)]
     })
     setProductPickerOpen(false)
     setProductSearch('')
-    setSaveError(null)
-    setSavedInvoice(null)
+    clearSavedState()
   }
 
   const updateLine = (lineId: string, field: 'qty' | 'rate' | 'discountPercent', value: string) => {
     const parsed = value.trim() === '' ? 0 : Number(value)
     if (!Number.isFinite(parsed)) return
     setLines((current) => current.map((line) => line.id === lineId ? { ...line, [field]: parsed } : line))
-    setSaveError(null)
-    setSavedInvoice(null)
+    clearSavedState()
   }
 
   const removeLine = (lineId: string) => {
     setLines((current) => current.filter((line) => line.id !== lineId))
-    setSaveError(null)
-    setSavedInvoice(null)
+    clearSavedState()
   }
 
-  const resetInvoice = () => {
-    if (quotationConversion) onCancelQuotationConversion?.()
+  const resetQuotation = () => {
     setSelectedParty(null)
     setLines([])
-    setInvoiceDate(todayInIndia())
+    setQuotationDate(todayInIndia())
+    setValidUntil(defaultValidUntil())
     setBillDiscountInput('')
-    setPaidAmountInput('')
-    setPaymentMode('CASH')
+    setNote('')
     setPartySearch('')
     setProductSearch('')
     setPartyPickerOpen(false)
     setProductPickerOpen(false)
     setSaveError(null)
-    setSavedInvoice(null)
+    setSavedQuotation(null)
   }
 
-  const save = async () => {
-    if (savedInvoice) {
-      resetInvoice()
+  const save = async (status: QuotationInitialStatus) => {
+    if (savedQuotation) {
+      resetQuotation()
       return
     }
     if (!selectedParty) {
-      setSaveError('Select a customer before confirming the sales invoice.')
-      return
-    }
-    if (quotationConversion && selectedParty.id !== quotationConversion.partyId) {
-      setSaveError(`The customer on ${quotationConversion.quotationNumber} is no longer available. This conversion must retain the original customer.`)
+      setSaveError('Select a customer before saving the quotation.')
       return
     }
     if (parsedBillDiscount === null) {
       setSaveError('Enter a valid non-negative bill discount.')
       return
     }
-    if (parsedPaidAmount === null) {
-      setSaveError('Enter a valid non-negative Paid Now amount.')
-      return
-    }
-    if (parsedPaidAmount > totals.grandTotal + 0.005) {
-      setSaveError('Paid Now cannot be more than the grand total.')
-      return
-    }
 
     setIsSaving(true)
     setSaveError(null)
     try {
-      const saved = await createConfirmedSalesInvoice(user.uid, selectedBusinessId, {
-        invoiceDate,
+      const saved = await createQuotation(user.uid, selectedBusinessId, {
+        quotationDate,
+        validUntil,
+        status,
         partyId: selectedParty.id,
         partyName: selectedParty.name,
         partyPhone: selectedParty.phone,
@@ -316,17 +257,9 @@ export function SalesInvoiceScreen({
         businessStateCode: activeBusinessStateCode,
         lines,
         billDiscount: parsedBillDiscount,
-        paidAmount: parsedPaidAmount,
-        paymentMode,
-        ...(quotationConversion ? {
-          sourceQuotation: {
-            quotationId: quotationConversion.quotationId,
-            quotationNumber: quotationConversion.quotationNumber,
-          },
-        } : {}),
+        note,
       })
-      setSavedInvoice(saved)
-      if (quotationConversion) onQuotationConverted?.()
+      setSavedQuotation(saved)
     } catch (error) {
       setSaveError(displayError(error))
     } finally {
@@ -336,22 +269,22 @@ export function SalesInvoiceScreen({
 
   return (
     <main className="desktop-layout">
-      <DesktopSidebar activePage="salesInvoices" onNavigate={onNavigate} />
-      <section className="dashboard-content sales-invoice-content">
+      <DesktopSidebar activePage="quotations" onNavigate={onNavigate} />
+      <section className="dashboard-content sales-invoice-content quotation-create-content">
         <header className="dashboard-header">
           <div>
-            <p className="breadcrumb">SHOWROOM / SALES{quotationConversion ? ' / QUOTATION CONVERSION' : ''}</p>
-            <h1>{quotationConversion ? 'Convert quotation to sales invoice' : 'Create sales invoice'}</h1>
-            <p>{selectedBusiness.name} · Confirming this invoice reserves a number and updates stock atomically.</p>
+            <p className="breadcrumb">SHOWROOM / QUOTATIONS</p>
+            <h1>Create quotation</h1>
+            <p>{selectedBusiness.name} · Quotes preserve item and GST snapshots but never change stock or payment balances.</p>
           </div>
           <div className="header-actions">
+            <button className="outline-button" type="button" onClick={() => onNavigate('quotations')}>All quotations</button>
             <button className="outline-button" type="button" onClick={clearBusinessSelection}>Switch business</button>
             <button className="user-button" type="button" onClick={() => void signOut()} title="Sign out">{(user.displayName ?? user.email ?? 'U').slice(0, 1).toUpperCase()}</button>
           </div>
         </header>
 
         {loadError ? <div className="settings-error" role="alert">{loadError}</div> : null}
-        {quotationConversion ? <div className="quotation-conversion-banner" role="status"><strong>Converting {quotationConversion.quotationNumber}</strong><span>Its immutable customer and item snapshots were copied into this Sales Invoice draft. Confirming the sale will atomically post stock and mark the quotation Converted.</span></div> : null}
         {isLoading ? <div className="settings-loading">Loading customers and catalog…</div> : null}
 
         {!isLoading && !loadError ? (
@@ -359,8 +292,11 @@ export function SalesInvoiceScreen({
             <div className="sales-invoice-main">
               <section className="invoice-card invoice-party-card">
                 <div className="invoice-card-heading">
-                  <div><span className="invoice-step">01</span><h2>Customer &amp; invoice</h2></div>
-                  <label className="invoice-date-field"><span>Invoice date</span><input type="date" value={invoiceDate} onChange={(event) => { setInvoiceDate(event.target.value || todayInIndia()); setSavedInvoice(null) }} /></label>
+                  <div><span className="invoice-step">01</span><h2>Customer &amp; quotation</h2></div>
+                  <div className="quotation-date-fields">
+                    <label className="invoice-date-field"><span>Quote date</span><input type="date" value={quotationDate} onChange={(event) => { setQuotationDate(event.target.value || todayInIndia()); clearSavedState() }} /></label>
+                    <label className="invoice-date-field"><span>Valid until</span><input type="date" min={quotationDate} value={validUntil} onChange={(event) => { setValidUntil(event.target.value); clearSavedState() }} /></label>
+                  </div>
                 </div>
 
                 <div className="selector-anchor">
@@ -389,17 +325,17 @@ export function SalesInvoiceScreen({
                 </div>
 
                 {selectedParty ? (
-                  <div className="party-autofill-grid" aria-label="Customer information copied to invoice">
+                  <div className="party-autofill-grid" aria-label="Customer information copied to quotation">
                     <div><span>Phone</span><strong>{selectedParty.phone || '—'}</strong></div>
                     <div><span>GSTIN</span><strong>{selectedParty.gstin || '—'}</strong></div>
                     <div className="party-autofill-address"><span>Billing address</span><strong>{[selectedParty.address, selectedParty.city, selectedParty.state, selectedParty.pincode].filter(Boolean).join(', ') || '—'}</strong></div>
                   </div>
-                ) : <p className="invoice-inline-help">Choose a customer to copy the party name, phone, GSTIN, and billing address into this invoice snapshot.</p>}
+                ) : <p className="invoice-inline-help">Choose a customer to copy the party snapshot into this quotation.</p>}
               </section>
 
               <section className="invoice-card invoice-items-card">
                 <div className="invoice-card-heading">
-                  <div><span className="invoice-step">02</span><h2>Line items</h2><p>Search the live catalog. Rate, quantity, and discount remain editable on the invoice.</p></div>
+                  <div><span className="invoice-step">02</span><h2>Line items</h2><p>Search the live catalog. Quotation rates, quantities, and discounts remain editable.</p></div>
                   <button className="primary-action-button compact-action" type="button" onClick={() => setProductPickerOpen((open) => !open)}>＋ Add product</button>
                 </div>
 
@@ -424,44 +360,38 @@ export function SalesInvoiceScreen({
                   <div className="invoice-lines-wrap">
                     <table className="invoice-lines-table">
                       <thead><tr><th>Product snapshot</th><th>Qty</th><th>Rate</th><th>Disc. %</th><th>Taxable</th><th>{jurisdiction.isInterState ? 'IGST' : 'CGST + SGST'}</th><th>Total</th><th aria-label="Remove" /></tr></thead>
-                      <tbody>
-                        {lines.map((line, index) => {
-                          const lineTotal = totals.lineTotals[index]
-                          return (
-                            <tr key={line.id}>
-                              <td><div className="invoice-line-product"><strong>{line.name}</strong><small>{[line.code, line.hsn ? `HSN ${line.hsn}` : '', line.unit, `GST ${line.gstPercent}%`].filter(Boolean).join(' · ')}</small></div></td>
-                              <td><input aria-label={`Quantity for ${line.name}`} type="number" min="0.001" step="0.001" value={line.qty} onChange={(event) => updateLine(line.id, 'qty', event.target.value)} /></td>
-                              <td><input aria-label={`Rate for ${line.name}`} type="number" min="0" step="0.01" value={line.rate} onChange={(event) => updateLine(line.id, 'rate', event.target.value)} /></td>
-                              <td><input aria-label={`Discount percent for ${line.name}`} type="number" min="0" max="100" step="0.01" value={line.discountPercent} onChange={(event) => updateLine(line.id, 'discountPercent', event.target.value)} /></td>
-                              <td><div className="invoice-money-cell"><strong>{money(lineTotal?.taxableAmount ?? 0)}</strong><small>Disc. {money(lineTotal?.discountAmount ?? 0)}</small></div></td>
-                              <td><div className="invoice-money-cell"><strong>{jurisdiction.isInterState ? money(lineTotal?.igstAmount ?? 0) : `${money(lineTotal?.cgstAmount ?? 0)} + ${money(lineTotal?.sgstAmount ?? 0)}`}</strong><small>{jurisdiction.isInterState ? 'IGST' : 'CGST / SGST'}</small></div></td>
-                              <td><strong className="invoice-line-total">{money(lineTotal?.lineTotal ?? 0)}</strong></td>
-                              <td><button className="remove-line-button" type="button" onClick={() => removeLine(line.id)} aria-label={`Remove ${line.name}`}>×</button></td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
+                      <tbody>{lines.map((line, index) => {
+                        const lineTotal = totals.lineTotals[index]
+                        return (
+                          <tr key={line.id}>
+                            <td><div className="invoice-line-product"><strong>{line.name}</strong><small>{[line.code, line.hsn ? `HSN ${line.hsn}` : '', line.unit, `GST ${line.gstPercent}%`].filter(Boolean).join(' · ')}</small></div></td>
+                            <td><input aria-label={`Quantity for ${line.name}`} type="number" min="0.001" step="0.001" value={line.qty} onChange={(event) => updateLine(line.id, 'qty', event.target.value)} /></td>
+                            <td><input aria-label={`Rate for ${line.name}`} type="number" min="0" step="0.01" value={line.rate} onChange={(event) => updateLine(line.id, 'rate', event.target.value)} /></td>
+                            <td><input aria-label={`Discount percent for ${line.name}`} type="number" min="0" max="100" step="0.01" value={line.discountPercent} onChange={(event) => updateLine(line.id, 'discountPercent', event.target.value)} /></td>
+                            <td><div className="invoice-money-cell"><strong>{money(lineTotal?.taxableAmount ?? 0)}</strong><small>Disc. {money(lineTotal?.discountAmount ?? 0)}</small></div></td>
+                            <td><div className="invoice-money-cell"><strong>{jurisdiction.isInterState ? money(lineTotal?.igstAmount ?? 0) : `${money(lineTotal?.cgstAmount ?? 0)} + ${money(lineTotal?.sgstAmount ?? 0)}`}</strong><small>{jurisdiction.isInterState ? 'IGST' : 'CGST / SGST'}</small></div></td>
+                            <td><strong className="invoice-line-total">{money(lineTotal?.lineTotal ?? 0)}</strong></td>
+                            <td><button className="remove-line-button" type="button" onClick={() => removeLine(line.id)} aria-label={`Remove ${line.name}`}>×</button></td>
+                          </tr>
+                        )
+                      })}</tbody>
                     </table>
                   </div>
-                ) : (
-                  <div className="invoice-empty-lines"><span aria-hidden="true">▤</span><h3>No products added</h3><p>Select products from the catalog to build this invoice.</p><button className="outline-button compact-action" type="button" onClick={() => setProductPickerOpen(true)}>Browse products</button></div>
-                )}
+                ) : <div className="invoice-empty-lines"><span aria-hidden="true">▤</span><h3>No products added</h3><p>Select products from the catalog to build this quotation.</p><button className="outline-button compact-action" type="button" onClick={() => setProductPickerOpen(true)}>Browse products</button></div>}
               </section>
 
-              <section className="invoice-card invoice-payment-card">
-                <div className="invoice-card-heading"><div><span className="invoice-step">03</span><h2>Discount &amp; payment</h2><p>Paid Now is optional; a remaining amount becomes the customer balance.</p></div></div>
-                <div className="invoice-payment-fields">
-                  <label className="form-field"><span>Bill discount</span><div className="currency-input"><span>₹</span><input value={billDiscountInput} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" onChange={(event) => { setBillDiscountInput(event.target.value); setSavedInvoice(null); setSaveError(null) }} /></div></label>
-                  <label className="form-field"><span>Paid Now</span><div className="currency-input"><span>₹</span><input value={paidAmountInput} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" onChange={(event) => { setPaidAmountInput(event.target.value); setSavedInvoice(null); setSaveError(null) }} /></div></label>
-                  <label className="form-field"><span>Payment mode</span><select value={paymentMode} onChange={(event) => { setPaymentMode(event.target.value as PaymentMode); setSavedInvoice(null) }}>{PAYMENT_MODES.map((mode) => <option value={mode.value} key={mode.value}>{mode.label}</option>)}</select></label>
-                  <div className="payment-status-preview"><span>Payment status</span><strong className={`payment-status ${totals.paymentStatus.toLowerCase()}`}>{paymentStatusLabel(totals.paymentStatus)}</strong><small>{money(totals.balanceAmount)} balance</small></div>
+              <section className="invoice-card quotation-note-card">
+                <div className="invoice-card-heading"><div><span className="invoice-step">03</span><h2>Discount &amp; note</h2><p>Quotations do not collect payment or reserve stock.</p></div></div>
+                <div className="quotation-extra-fields">
+                  <label className="form-field"><span>Bill discount</span><div className="currency-input"><span>₹</span><input value={billDiscountInput} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" onChange={(event) => { setBillDiscountInput(event.target.value); clearSavedState() }} /></div></label>
+                  <label className="form-field quotation-note-field"><span>Internal note</span><textarea value={note} maxLength={1000} placeholder="Optional terms, delivery note, or internal note" onChange={(event) => { setNote(event.target.value); clearSavedState() }} /></label>
                 </div>
               </section>
             </div>
 
             <aside className="sales-invoice-summary-column">
               <section className="invoice-summary-card">
-                <div className="invoice-summary-heading"><span>LIVE BILL SUMMARY</span><strong>{jurisdiction.isInterState ? 'Interstate · IGST' : 'Same state · CGST + SGST'}</strong></div>
+                <div className="invoice-summary-heading"><span>LIVE QUOTATION SUMMARY</span><strong>{jurisdiction.isInterState ? 'Interstate · IGST' : 'Same state · CGST + SGST'}</strong></div>
                 {!jurisdiction.isResolved && selectedParty ? <p className="tax-jurisdiction-warning">GST state codes are missing or invalid. The preview uses same-state CGST/SGST until both codes can be compared.</p> : null}
                 <dl className="invoice-summary-list">
                   <div><dt>Subtotal</dt><dd>{money(totals.subtotal)}</dd></div>
@@ -472,21 +402,17 @@ export function SalesInvoiceScreen({
                   {jurisdiction.isInterState ? <div><dt>IGST</dt><dd>{money(totals.igstAmount)}</dd></div> : <><div><dt>CGST</dt><dd>{money(totals.cgstAmount)}</dd></div><div><dt>SGST</dt><dd>{money(totals.sgstAmount)}</dd></div></>}
                   <div><dt>Round off</dt><dd>{totals.roundOff >= 0 ? '+' : '−'}{money(Math.abs(totals.roundOff))}</dd></div>
                   <div className="grand-total-row"><dt>Grand total</dt><dd>{money(totals.grandTotal)}</dd></div>
-                  <div className="balance-row"><dt>Balance amount</dt><dd>{money(totals.balanceAmount)}</dd></div>
                 </dl>
-                <div className="invoice-save-actions">
-                  <button className="primary-action-button invoice-confirm-button" type="button" disabled={isSaving || lines.length === 0 || Boolean(loadError) || Boolean(quotationConversion && selectedParty?.id !== quotationConversion.partyId)} onClick={() => void save()}>{isSaving ? 'Confirming atomically…' : savedInvoice ? 'Create another invoice' : quotationConversion ? 'Confirm conversion & update stock' : 'Confirm sale & update stock'}</button>
-                  {!savedInvoice ? <button className="outline-button compact-action" type="button" disabled={isSaving} onClick={resetInvoice}>{quotationConversion ? 'Cancel conversion' : 'Clear invoice'}</button> : null}
+                <div className="quotation-save-actions">
+                  {savedQuotation ? <button className="primary-action-button invoice-confirm-button" type="button" onClick={resetQuotation}>Create another quotation</button> : <><button className="outline-button compact-action" type="button" disabled={isSaving || lines.length === 0 || Boolean(loadError)} onClick={() => void save('DRAFT')}>{isSaving ? 'Saving…' : 'Save draft'}</button><button className="primary-action-button invoice-confirm-button" type="button" disabled={isSaving || lines.length === 0 || Boolean(loadError)} onClick={() => void save('SENT')}>{isSaving ? 'Saving…' : 'Save & mark sent'}</button></>}
+                  {!savedQuotation ? <button className="text-button quotation-reset-button" type="button" disabled={isSaving} onClick={resetQuotation}>Clear quotation</button> : null}
                 </div>
               </section>
 
-              <section className="invoice-atomic-note">
-                <span aria-hidden="true">⌘</span>
-                <div><strong>One atomic transaction</strong><p>Number reservation, stock verification/decrement, invoice + item snapshots, stock ledger rows, and an optional payment/link all commit together. A crash or stock race cannot leave a partial sale.</p></div>
-              </section>
+              <section className="quotation-safe-note"><span aria-hidden="true">◌</span><div><strong>No stock or payment posting</strong><p>Saving a quotation only reserves its quotation number and stores immutable customer/item/tax snapshots. Inventory and party balances are unchanged until an accepted quotation is converted to a sales invoice.</p></div></section>
 
               {saveError ? <div className="settings-error invoice-save-message" role="alert">{saveError}</div> : null}
-              {savedInvoice ? <div className="invoice-saved-message" role="status"><strong>{savedInvoice.number} confirmed</strong><span>{money(savedInvoice.grandTotal)} · {paymentStatusLabel(savedInvoice.paymentStatus)} · balance {money(savedInvoice.balanceAmount)}</span><button className="table-action-button" type="button" onClick={() => onOpenInvoice(savedInvoice.id)}>View invoice</button></div> : null}
+              {savedQuotation ? <div className="invoice-saved-message" role="status"><strong>{savedQuotation.number} {savedQuotation.status.toLowerCase()}</strong><span>{money(savedQuotation.grandTotal)} · no stock or payment posted</span><button className="table-action-button" type="button" onClick={() => onOpenQuotation(savedQuotation.id)}>View quotation</button></div> : null}
             </aside>
           </div>
         ) : null}
