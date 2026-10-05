@@ -28,12 +28,13 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 function authErrorMessage(error: unknown): string {
   const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
+  const currentHostname = typeof window === 'undefined' ? 'this host' : window.location.hostname || 'this host'
   const messages: Record<string, string> = {
     'auth/popup-closed-by-user': 'Google sign-in was cancelled.',
     'auth/popup-blocked': 'The Google sign-in window was blocked. Try the redirect sign-in option below.',
     'auth/redirect-cancelled-by-user': 'Google sign-in was cancelled.',
     'auth/operation-not-allowed': 'Google Sign-In is not enabled for this Firebase project.',
-    'auth/unauthorized-domain': 'This desktop origin is not authorized in Firebase Authentication.',
+    'auth/unauthorized-domain': `This desktop origin is not authorized. Add ${currentHostname} to Firebase Authentication > Settings > Authorized domains.`,
     'auth/network-request-failed': 'Network connection failed. Check your internet connection and try again.',
   }
   if (messages[code]) return messages[code]
