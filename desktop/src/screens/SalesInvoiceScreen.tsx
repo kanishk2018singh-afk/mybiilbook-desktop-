@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
+import { BILLING_CONNECTION_MESSAGE, useSyncStatus } from '../context/SyncStatusContext'
 import { useBusiness } from '../context/BusinessContext'
 import {
   calculateSalesInvoiceTotals,
@@ -104,6 +106,7 @@ export function SalesInvoiceScreen({
   onCancelQuotationConversion,
 }: SalesInvoiceScreenProps) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [parties, setParties] = useState<Party[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -279,6 +282,10 @@ export function SalesInvoiceScreen({
       resetInvoice()
       return
     }
+    if (!isOnline) {
+      setSaveError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
     if (!selectedParty) {
       setSaveError('Select a customer before confirming the sales invoice.')
       return
@@ -350,6 +357,7 @@ export function SalesInvoiceScreen({
           </div>
         </header>
 
+        <BillingInternetNotice />
         {loadError ? <div className="settings-error" role="alert">{loadError}</div> : null}
         {quotationConversion ? <div className="quotation-conversion-banner" role="status"><strong>Converting {quotationConversion.quotationNumber}</strong><span>Its immutable customer and item snapshots were copied into this Sales Invoice draft. Confirming the sale will atomically post stock and mark the quotation Converted.</span></div> : null}
         {isLoading ? <div className="settings-loading">Loading customers and catalog…</div> : null}
@@ -475,7 +483,7 @@ export function SalesInvoiceScreen({
                   <div className="balance-row"><dt>Balance amount</dt><dd>{money(totals.balanceAmount)}</dd></div>
                 </dl>
                 <div className="invoice-save-actions">
-                  <button className="primary-action-button invoice-confirm-button" type="button" disabled={isSaving || lines.length === 0 || Boolean(loadError) || Boolean(quotationConversion && selectedParty?.id !== quotationConversion.partyId)} onClick={() => void save()}>{isSaving ? 'Confirming atomically…' : savedInvoice ? 'Create another invoice' : quotationConversion ? 'Confirm conversion & update stock' : 'Confirm sale & update stock'}</button>
+                  <button className="primary-action-button invoice-confirm-button" type="button" disabled={isSaving || (!savedInvoice && !isOnline) || lines.length === 0 || Boolean(loadError) || Boolean(quotationConversion && selectedParty?.id !== quotationConversion.partyId)} onClick={() => void save()}>{isSaving ? 'Confirming atomically…' : savedInvoice ? 'Create another invoice' : quotationConversion ? 'Confirm conversion & update stock' : 'Confirm sale & update stock'}</button>
                   {!savedInvoice ? <button className="outline-button compact-action" type="button" disabled={isSaving} onClick={resetInvoice}>{quotationConversion ? 'Cancel conversion' : 'Clear invoice'}</button> : null}
                 </div>
               </section>

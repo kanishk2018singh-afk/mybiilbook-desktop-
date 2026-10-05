@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
+import { BILLING_CONNECTION_MESSAGE, useSyncStatus } from '../context/SyncStatusContext'
 import { createStockAdjustment } from '../repositories/stockRepository'
 import { subscribeToProducts } from '../repositories/productsRepository'
 import type { Product } from '../types/product'
@@ -27,6 +29,7 @@ function adjustmentError(error: unknown): string {
 
 export function StockAdjustmentScreen({ onNavigate }: StockAdjustmentScreenProps) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [products, setProducts] = useState<Product[]>([])
   const [productsLoading, setProductsLoading] = useState(true)
@@ -72,6 +75,10 @@ export function StockAdjustmentScreen({ onNavigate }: StockAdjustmentScreenProps
   }
 
   const save = async () => {
+    if (!isOnline) {
+      setFormError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
     if (!selectedProduct) {
       setFormError('Select a product before saving the adjustment.')
       return
@@ -128,6 +135,7 @@ export function StockAdjustmentScreen({ onNavigate }: StockAdjustmentScreenProps
           </div>
         </header>
 
+        <BillingInternetNotice />
         {loadError ? <div className="settings-error" role="alert">{loadError}</div> : null}
         {successMessage ? <div className="stock-adjustment-success" role="status">✓ {successMessage}</div> : null}
 
@@ -161,7 +169,7 @@ export function StockAdjustmentScreen({ onNavigate }: StockAdjustmentScreenProps
             {formError ? <p className="form-error" role="alert">{formError}</p> : null}
             <div className="stock-adjustment-actions">
               <button className="outline-button" type="button" disabled={isSaving} onClick={() => { setAdjustmentQty(''); setReason(''); setNote(''); setFormError(null); setSuccessMessage(null) }}>Clear</button>
-              <button className={`primary-action-button ${isStockIn ? 'stock-in-action' : 'stock-out-action'}`} type="button" disabled={isSaving || !selectedProduct || parsedQty === null || wouldGoNegative} onClick={() => void save()}>{isSaving ? 'Posting transaction…' : isStockIn ? 'Add stock & post adjustment' : 'Remove stock & post adjustment'}</button>
+              <button className={`primary-action-button ${isStockIn ? 'stock-in-action' : 'stock-out-action'}`} type="button" disabled={isSaving || !isOnline || !selectedProduct || parsedQty === null || wouldGoNegative} onClick={() => void save()}>{isSaving ? 'Posting transaction…' : isStockIn ? 'Add stock & post adjustment' : 'Remove stock & post adjustment'}</button>
             </div>
           </section>
 

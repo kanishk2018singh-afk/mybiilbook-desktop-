@@ -7319,3 +7319,119 @@ code {
     width: 100%;
   }
 }
+
+/* Firestore offline cache and transaction-safety status */
+.sync-status-banner {
+  position: fixed;
+  right: 1.35rem;
+  bottom: 1.35rem;
+  z-index: 200;
+  display: flex;
+  width: min(390px, calc(100vw - 2.7rem));
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid #c7d8e2;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.97);
+  padding: 0.82rem 0.95rem;
+  color: #254253;
+  box-shadow: 0 16px 36px rgba(20, 49, 70, 0.18);
+}
+
+.sync-status-banner.offline {
+  border-color: #e7bd78;
+  background: #fff9ed;
+  color: #704e1c;
+}
+
+.sync-status-banner.checking {
+  border-color: #b8c8d6;
+  background: #f5f8fb;
+}
+
+.sync-status-banner.pending {
+  border-color: #88c9b6;
+  background: #f0fbf7;
+  color: #155b4b;
+}
+
+.sync-status-icon {
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(41, 105, 123, 0.1);
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.sync-status-banner > div {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.sync-status-banner strong {
+  font-size: 0.82rem;
+}
+
+.sync-status-banner span:not(.sync-status-icon),
+.sync-status-banner small {
+  font-size: 0.74rem;
+  line-height: 1.38;
+}
+
+.sync-status-banner small {
+  margin-top: 0.16rem;
+  color: inherit;
+  opacity: 0.84;
+}
+
+.billing-connection-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  border: 1px solid #ebc476;
+  border-radius: 12px;
+  background: #fff9eb;
+  padding: 0.82rem 0.95rem;
+  color: #704e1c;
+}
+
+.billing-connection-notice > span {
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #ffe7b8;
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.billing-connection-notice div {
+  display: grid;
+  gap: 0.26rem;
+}
+
+.billing-connection-notice strong {
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.billing-connection-notice p {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.48;
+}
+
+@media (max-width: 700px) {
+  .sync-status-banner {
+    right: 0.8rem;
+    bottom: 0.8rem;
+    width: calc(100vw - 1.6rem);
+  }
+}

@@ -5,7 +5,7 @@ This repository contains two applications:
 - [`webapp/`](./webapp/) — existing offline/PWA billing app.
 - [`desktop/`](./desktop/) — Electron + React desktop companion for the Android showroom-management app.
 
-The desktop companion is a Firebase dashboard foundation with shared document-number settings, master-data management, an atomic opening-stock product catalog, live customer/supplier party masters with calculated balances, and atomic sales/purchase invoice creation, registers, cancellation reversals, and GST PDF export. See [`desktop/README.md`](./desktop/README.md) for Firebase setup and development commands.
+The desktop companion is a Firebase dashboard foundation with shared document-number settings, master-data management, an atomic opening-stock product catalog, live customer/supplier party masters with calculated balances, and atomic sales/purchase invoice creation, registers, cancellation reversals, and GST PDF export. It also enables Firestore IndexedDB offline persistence, shows a selected-business **Pending Sync** count from Firestore pending-write metadata, and keeps finalized billing/inventory changes online-only to prevent stale-stock conflicts. See [`desktop/README.md`](./desktop/README.md) for Firebase setup and development commands.
 
 ## Standalone payments
 
@@ -30,3 +30,9 @@ The **Expenses** workspace provides business-scoped CRUD for expense categories 
 ## Home Dashboard
 
 The live **Home Dashboard** turns the selected business’s confirmed invoice, payment, product, and sales-item data into today/month sales, today’s purchases, outstanding receivables/payables, and a cash-in-hand estimate based on CASH payments. It also provides a zero-filled 30-day sales trend, all-time top-selling products, low-stock alerts, and a selected-date-range GST report with Sales output tax and Purchase input tax separated into CGST, SGST, and IGST. All figures exclude cancelled invoices and are scoped to the active business.
+
+## Offline sync and finalized billing safety
+
+The Electron desktop app enables Firestore IndexedDB persistence and shows **“X changes pending sync”** from Firestore snapshot `metadata.hasPendingWrites`. Ordinary non-stock changes may wait locally for acknowledgement, but finalized Sales/Purchase invoices, stock adjustments, return notes, cancellation reversals, and opening-stock creation are intentionally disabled unless Firestore confirms a live connection. The protected UI says: **“Billing requires internet connection to prevent stock conflicts. Please reconnect.”** This avoids running stock-dependent transactions against stale cached quantities.
+
+The mobile app should follow the same finalization policy. A future mobile flow may permit local **draft-only** invoices offline, but it must reserve final numbers, post payments/stock, and finalize only after reconnecting and revalidating through the normal transaction path. See [`desktop/README.md`](./desktop/README.md#offline-cache-pending-sync-and-billing-safety) for the full tradeoff and persistence fallback behavior.

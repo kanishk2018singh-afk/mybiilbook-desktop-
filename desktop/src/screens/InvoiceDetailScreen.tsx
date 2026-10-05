@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
+import { BILLING_CONNECTION_MESSAGE, useSyncStatus } from '../context/SyncStatusContext'
 import { exportInvoicePdf } from '../lib/invoicePdf'
 import { invoiceKindLabel, invoicePartyLabel, paymentStatusLabel } from '../lib/invoiceUtils'
 import { cancelConfirmedInvoice, subscribeToInvoiceDetail } from '../repositories/invoicesRepository'
@@ -50,6 +52,7 @@ function itemTaxableAmount(item: InvoiceDetail['items'][number]): number {
 
 export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack, onCreateReturnNote }: InvoiceDetailScreenProps) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -85,6 +88,10 @@ export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack, onCre
   if (!user || !selectedBusiness || !selectedBusinessId) return null
 
   const openCancelDialog = () => {
+    if (!isOnline) {
+      setCancelError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
     setCancellationReason('')
     setCancelError(null)
     setCancelDialogOpen(true)
@@ -100,6 +107,10 @@ export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack, onCre
   }
   const cancelInvoice = async () => {
     if (!invoice) return
+    if (!isOnline) {
+      setCancelError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
     setIsCancelling(true)
     setCancelError(null)
     try {
@@ -143,6 +154,7 @@ export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack, onCre
           </div>
         </header>
 
+        <BillingInternetNotice />
         {loadError ? <div className="settings-error" role="alert">{loadError}</div> : null}
         {pdfError ? <div className="settings-error" role="alert">{pdfError}</div> : null}
         {isLoading ? <div className="settings-loading">Loading {title.toLowerCase()}…</div> : null}
@@ -210,10 +222,10 @@ export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack, onCre
               </section>
 
               {invoice.status === 'CONFIRMED' ? <>
-                <button className="outline-button invoice-return-note-action" type="button" onClick={() => onCreateReturnNote(kind, invoice.id)}>{kind === 'SALE' ? 'Create credit note / sales return' : 'Create debit note / purchase return'}</button>
+                <button className="outline-button invoice-return-note-action" type="button" disabled={!isOnline} onClick={() => onCreateReturnNote(kind, invoice.id)}>{kind === 'SALE' ? 'Create credit note / sales return' : 'Create debit note / purchase return'}</button>
                 {returnNoteCount > 0
                   ? <div className="invoice-detail-locked">Cancellation is locked after return notes are posted. This protects the inventory audit trail from a duplicate full reversal.</div>
-                  : <button className="danger-action-button" type="button" onClick={openCancelDialog}>Cancel invoice &amp; reverse stock</button>}
+                  : <button className="danger-action-button" type="button" disabled={!isOnline} onClick={openCancelDialog}>Cancel invoice &amp; reverse stock</button>}
               </> : null}
               {invoice.status === 'CANCELLED' ? <div className="invoice-detail-locked">This invoice is cancelled and remains read-only for audit history.</div> : null}
             </aside>
@@ -230,7 +242,7 @@ export function InvoiceDetailScreen({ kind, invoiceId, onNavigate, onBack, onCre
             <label className="form-field"><span>Cancellation reason <small>(optional)</small></span><textarea value={cancellationReason} maxLength={250} placeholder={kind === 'SALE' ? 'e.g. Customer invoice was entered twice' : 'e.g. Supplier bill was entered twice'} onChange={(event) => setCancellationReason(event.target.value)} /></label>
             <p className="cancel-payment-note">Linked payments are retained in the audit trail and released as unallocated party advances; cash/bank history is never deleted.</p>
             {cancelError ? <p className="form-error" role="alert">{cancelError}</p> : null}
-            <div className="dialog-actions"><button className="outline-button" type="button" disabled={isCancelling} onClick={() => setCancelDialogOpen(false)}>Keep invoice</button><button className="danger-action-button" type="button" disabled={isCancelling} onClick={() => void cancelInvoice()}>{isCancelling ? 'Cancelling atomically…' : 'Cancel & reverse stock'}</button></div>
+            <div className="dialog-actions"><button className="outline-button" type="button" disabled={isCancelling} onClick={() => setCancelDialogOpen(false)}>Keep invoice</button><button className="danger-action-button" type="button" disabled={isCancelling || !isOnline} onClick={() => void cancelInvoice()}>{isCancelling ? 'Cancelling atomically…' : 'Cancel & reverse stock'}</button></div>
           </section>
         </div>
       ) : null}

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
+import { useSyncStatus } from '../context/SyncStatusContext'
 import { buildStockLedger, roundStock, stockDirection, stockTransactionTypeLabel, summarizeStockLedger } from '../lib/stockLedgerUtils'
 import { subscribeToProducts } from '../repositories/productsRepository'
 import { subscribeToStockTransactions } from '../repositories/stockRepository'
@@ -30,6 +32,7 @@ function transactionCopy(entry: StockTransaction): string {
 
 export function StockLedgerScreen({ onNavigate }: StockLedgerScreenProps) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [products, setProducts] = useState<Product[]>([])
   const [productsLoading, setProductsLoading] = useState(true)
@@ -103,11 +106,13 @@ export function StockLedgerScreen({ onNavigate }: StockLedgerScreenProps) {
             <p>Review every stock movement in chronological passbook order and reconcile it to the current product stock.</p>
           </div>
           <div className="header-actions">
-            <button className="primary-action-button" type="button" onClick={() => onNavigate('stockAdjustment')}>± Stock adjustment</button>
+            <button className="primary-action-button" type="button" disabled={!isOnline} onClick={() => onNavigate('stockAdjustment')}>± Stock adjustment</button>
             <button className="outline-button" type="button" onClick={clearBusinessSelection}>Switch business</button>
             <button className="user-button" type="button" onClick={() => void signOut()} title="Sign out">{(user.displayName ?? user.email ?? 'U').slice(0, 1).toUpperCase()}</button>
           </div>
         </header>
+
+        <BillingInternetNotice />
 
         <section className="stock-ledger-selector-card">
           <div><span className="panel-kicker">PRODUCT PASSBOOK</span><h2>Select a product</h2><p>The report includes Opening, Purchase, Sale, returns, adjustments, Damage, and any migrated movements.</p></div>
@@ -133,7 +138,7 @@ export function StockLedgerScreen({ onNavigate }: StockLedgerScreenProps) {
             {ledger.length ? <div className="invoice-lines-wrap"><table className="stock-ledger-table"><thead><tr><th>Date &amp; time</th><th>Movement</th><th>Reference / reason</th><th>Note</th><th>In</th><th>Out</th><th>Running balance</th></tr></thead><tbody>{ledger.map((entry) => {
               const direction = stockDirection(entry.type, entry.quantityDelta)
               return <tr key={entry.id}><td><time dateTime={entry.createdAt || undefined}>{dateTimeLabel(entry.createdAt)}</time></td><td><span className={`stock-transaction-pill ${entry.type.toLowerCase()} ${direction.toLowerCase()}`}>{stockTransactionTypeLabel(entry.type)}</span></td><td><div className="stock-ledger-reference"><strong>{transactionCopy(entry)}</strong><small>{entry.reason || entry.referenceId || 'No reason recorded'}</small></div></td><td className="stock-ledger-note">{entry.note || '—'}</td><td className="stock-in-cell">{entry.quantityIn ? `+${quantity(entry.quantityIn)}` : '—'}</td><td className="stock-out-cell">{entry.quantityOut ? `−${quantity(entry.quantityOut)}` : '—'}</td><td><strong>{quantity(entry.runningBalanceQty)} {selectedProduct.unit || 'PCS'}</strong>{entry.balanceAfter !== null && Math.abs(entry.balanceAfter - entry.runningBalanceQty) > 0.000001 ? <small className="stock-balance-audit">posted {quantity(entry.balanceAfter)}</small> : null}</td></tr>
-            })}</tbody></table></div> : <div className="stock-ledger-empty"><span aria-hidden="true">▤</span><h2>No stock transactions found</h2><p>Create an opening-stock product, post a purchase/sale, or record an adjustment to begin this passbook.</p><button className="primary-action-button compact-action" type="button" onClick={() => onNavigate('stockAdjustment')}>Record stock adjustment</button></div>}
+            })}</tbody></table></div> : <div className="stock-ledger-empty"><span aria-hidden="true">▤</span><h2>No stock transactions found</h2><p>Create an opening-stock product, post a purchase/sale, or record an adjustment to begin this passbook.</p><button className="primary-action-button compact-action" type="button" disabled={!isOnline} onClick={() => onNavigate('stockAdjustment')}>Record stock adjustment</button></div>}
           </section>
 
           {!isReconciled ? <section className="stock-ledger-reconciliation-warning"><strong>Ledger reconciliation notice</strong><p>The calculated movement total differs from the current product stock by {quantity(Math.abs(reconciliationDifference))} {selectedProduct.unit || 'PCS'}. Review legacy/missing entries before using the ledger as the audit baseline; do not edit the product stock directly.</p></section> : null}

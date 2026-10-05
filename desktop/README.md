@@ -18,6 +18,7 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - Live Sales/Purchase invoice registers, immutable detail/payment history, stock-safe cancellation, and GST PDF export
 - Live Expenses register, expense-category masters, date/category totals, and a category-wise Recharts pie chart
 - A live Home Dashboard with sales/purchase/cash/party metrics, sales trend, top products, low-stock alerts, and GST summary
+- IndexedDB-backed Firestore offline cache, a desktop Pending Sync indicator, and online-only finalized billing / inventory safeguards
 
 Other dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, product/stock-baseline creation, Sales/Purchase Invoice confirmation or cancellation, and Expenses are the intentional, scoped Firestore write workflows.
 
@@ -57,6 +58,29 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 
 Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, Sales/Purchase Invoice confirmation or cancellation, Credit/Debit Note return posting, Stock Adjustments, and Expense Categories/Entries are the limited write operations added so far.
 
+## Offline cache, Pending Sync, and billing safety
+
+The desktop renderer calls Firestore Web SDK `enableIndexedDbPersistence()` **before React mounts any listeners**. This gives ordinary Firestore reads a durable local cache and lets ordinary non-transactional writes (for example master-data or expense changes) remain on the device until Firestore can acknowledge them after reconnecting.
+
+- The setup is intentionally guarded. `failed-precondition` (another Electron renderer/tab owns the persistence lock), `unimplemented` (no IndexedDB support), or another persistence startup error falls back without crashing the app. In that fallback, Firestore continues with its normal in-memory cache.
+- Persistent browser storage is not automatically cleared between sessions. Use the desktop app only on a trusted computer and sign out when appropriate.
+- The active business gets metadata-enabled, business-scoped listeners for its primary write collections. Their `includeMetadataChanges: true` snapshots use `metadata.hasPendingWrites` to drive the fixed desktop status card: **“X changes pending sync.”** The count represents pending primary document changes observed for the selected `users/{uid}/businesses/{businessId}` scope; it never combines another showroom's data. Large append-only audit rows are represented by their corresponding product, invoice, payment, or return-note header change rather than permanently duplicating ledger downloads only for the indicator.
+- Browser online/offline events provide immediate feedback, while Firestore `metadata.fromCache` confirms whether the selected business's **products** listener has fresh server data. The UI remains conservative while that stock-critical confirmation is still pending.
+
+### Why finalized billing is online-only
+
+Firestore can queue regular writes offline, but a Firestore `runTransaction()` cannot safely validate stock against stale local state. Sales/Purchase confirmation, invoice cancellation, Credit/Debit Notes, and Stock Adjustments all read and write product quantities as one atomic operation. Product creation also creates its opening-stock ledger baseline together with the product. Queuing any of those actions against cached inventory could oversell, double-reverse, or create inconsistent stock history when another device changes stock first.
+
+For that reason, the desktop disables new invoice confirmation, quotation-to-invoice conversion, opening-stock product creation, product deletion, invoice cancellation, Credit/Debit Notes, and Stock Adjustments until Firestore has confirmed a live connection. Every protected workflow shows exactly:
+
+> Billing requires internet connection to prevent stock conflicts. Please reconnect.
+
+This is a deliberate tradeoff: ordinary non-stock updates can be visible locally and show in **Pending Sync**, but final invoices and inventory mutations are never queued offline. Existing invoices, reports, ledgers, and cached master data remain readable while offline.
+
+### Mobile policy recommendation
+
+The mobile app should follow the same finalized-invoice restriction conceptually: do not finalize an invoice, reserve its final number, post a payment, or mutate stock until it reconnects and can execute the stock-safe transaction. A future mobile experience may allow **local drafts only** while offline, provided those drafts remain clearly non-final and are revalidated/finalized after reconnecting. Draft-only offline capture is intentionally different from offline final billing.
+
 ## Data flow
 
 ```text
@@ -75,6 +99,8 @@ Google Sign-In
 | `src/lib/firebase.ts` | Firebase Web SDK initialisation from environment variables |
 | `src/context/AuthContext.tsx` | Auth session and Google Sign-In |
 | `src/context/BusinessContext.tsx` | Business list and selected `businessId` |
+| `src/context/SyncStatusContext.tsx` | Business-scoped Firestore metadata listeners, connection safety state, and pending-write count |
+| `src/components/SyncStatusBanner.tsx` | Fixed desktop Pending Sync / offline status card |
 | `src/lib/firestorePaths.ts` | Scoped, validated Firestore path helpers |
 | `src/repositories/businessRepository.ts` | Real-time business subscription |
 | `electron/main.ts` | Secure Electron window and loopback renderer host |

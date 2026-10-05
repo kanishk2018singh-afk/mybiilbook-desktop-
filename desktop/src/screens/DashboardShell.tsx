@@ -8,9 +8,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
+import { useSyncStatus } from '../context/SyncStatusContext'
 import {
   buildSalesTrend,
   calculateDashboardMetrics,
@@ -53,6 +55,7 @@ function TaxBreakdown({ totals, tone }: { totals: GstTaxTotals; tone: 'sales' | 
 
 export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage) => void }) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [data, setData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -112,6 +115,8 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
             </button>
           </div>
         </header>
+
+        <BillingInternetNotice />
 
         <section className="dashboard-live-banner">
           <span className="status-chip"><span className="live-dot" /> Live business aggregates</span>
@@ -180,7 +185,7 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                ) : <div className="home-panel-empty"><span>↗</span><strong>No confirmed sales in the last 30 days</strong><p>Confirm a Sales Invoice to begin plotting your daily trend.</p><button className="outline-button compact-action" type="button" onClick={() => onNavigate('salesInvoice')}>Create sales invoice</button></div>}
+                ) : <div className="home-panel-empty"><span>↗</span><strong>No confirmed sales in the last 30 days</strong><p>Confirm a Sales Invoice to begin plotting your daily trend.</p><button className="outline-button compact-action" type="button" disabled={!isOnline} onClick={() => onNavigate('salesInvoice')}>Create sales invoice</button></div>}
               </section>
 
               <section className="home-panel top-products-panel" aria-labelledby="top-products-title">

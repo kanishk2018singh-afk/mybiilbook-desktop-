@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
+import { useSyncStatus } from '../context/SyncStatusContext'
 import { EMPTY_INVOICE_FILTERS, type InvoiceKind, type InvoiceListFilters, type InvoiceListItem } from '../types/invoice'
 import { filterInvoices, invoiceKindLabel, invoicePartyLabel, paymentStatusLabel } from '../lib/invoiceUtils'
 import { subscribeToInvoices } from '../repositories/invoicesRepository'
@@ -41,6 +43,7 @@ function statusLabel(status: InvoiceListItem['status']): string {
 
 export function InvoiceListScreen({ kind, onNavigate, onOpenInvoice }: InvoiceListScreenProps) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -94,11 +97,13 @@ export function InvoiceListScreen({ kind, onNavigate, onOpenInvoice }: InvoiceLi
             <p>Review immutable documents, filter the register, and open a complete invoice audit trail.</p>
           </div>
           <div className="header-actions">
-            <button className="primary-action-button" type="button" onClick={() => onNavigate(newInvoicePage(kind))}>＋ New {kind === 'SALE' ? 'sales' : 'purchase'} invoice</button>
+            <button className="primary-action-button" type="button" disabled={!isOnline} onClick={() => onNavigate(newInvoicePage(kind))}>＋ New {kind === 'SALE' ? 'sales' : 'purchase'} invoice</button>
             <button className="outline-button" type="button" onClick={clearBusinessSelection}>Switch business</button>
             <button className="user-button" type="button" onClick={() => void signOut()} title="Sign out">{(user.displayName ?? user.email ?? 'U').slice(0, 1).toUpperCase()}</button>
           </div>
         </header>
+
+        <BillingInternetNotice />
 
         <section className="invoice-register-filters" aria-label={`${title} filters`}>
           <label><span>From date</span><input type="date" value={filters.dateFrom} onChange={(event) => updateFilter('dateFrom', event.target.value)} /></label>
@@ -134,7 +139,7 @@ export function InvoiceListScreen({ kind, onNavigate, onOpenInvoice }: InvoiceLi
                 </table>
               </div>
             ) : (
-              <div className="invoice-register-empty"><span aria-hidden="true">⌕</span><h2>No invoices found</h2><p>Try changing the date, party, payment, or status filters.</p>{invoices.length === 0 ? <button className="primary-action-button compact-action" type="button" onClick={() => onNavigate(newInvoicePage(kind))}>Create the first invoice</button> : null}</div>
+              <div className="invoice-register-empty"><span aria-hidden="true">⌕</span><h2>No invoices found</h2><p>Try changing the date, party, payment, or status filters.</p>{invoices.length === 0 ? <button className="primary-action-button compact-action" type="button" disabled={!isOnline} onClick={() => onNavigate(newInvoicePage(kind))}>Create the first invoice</button> : null}</div>
             )}
           </section>
         ) : null}

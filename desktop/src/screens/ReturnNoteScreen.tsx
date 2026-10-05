@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
+import { BILLING_CONNECTION_MESSAGE, useSyncStatus } from '../context/SyncStatusContext'
 import { calculateReturnNoteTotals, roundQuantity } from '../lib/returnNoteUtils'
 import { subscribeToInvoiceDetail, subscribeToInvoices } from '../repositories/invoicesRepository'
 import { createConfirmedReturnNote, subscribeToReturnedItemBalances } from '../repositories/returnNotesRepository'
@@ -62,6 +64,7 @@ function errorMessage(error: unknown): string {
 
 export function ReturnNoteScreen({ noteKind, initialSourceInvoiceId = null, onNavigate, onOpenInvoice }: ReturnNoteScreenProps) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const sourceKind = sourceInvoiceKindForReturnNote(noteKind)
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([])
@@ -203,6 +206,10 @@ export function ReturnNoteScreen({ noteKind, initialSourceInvoiceId = null, onNa
   }
 
   const save = async () => {
+    if (!isOnline) {
+      setFormError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
     if (!sourceInvoice) {
       setFormError(`Select a confirmed ${sourceLabel(noteKind).toLowerCase()} first.`)
       return
@@ -282,6 +289,7 @@ export function ReturnNoteScreen({ noteKind, initialSourceInvoiceId = null, onNa
           </div>
         </header>
 
+        <BillingInternetNotice />
         {invoicesError || sourceError ? <div className="settings-error" role="alert">{invoicesError || sourceError}</div> : null}
         {savedNote ? <section className="return-note-success" role="status"><div><strong>{savedNote.number} posted</strong><span>{money(savedNote.grandTotal)} {savedNote.appliedToInvoiceAmount ? `was applied to the source invoice balance.` : savedNote.refundAmount ? `was recorded as a refund payment.` : 'remains as a party credit/debit.'}</span></div><button className="table-action-button" type="button" onClick={() => onOpenInvoice(sourceKind, savedNote.sourceInvoiceId)}>View source invoice</button><button className="outline-button compact-action" type="button" onClick={resetForm}>Create another</button></section> : null}
 
@@ -325,7 +333,7 @@ export function ReturnNoteScreen({ noteKind, initialSourceInvoiceId = null, onNa
               <div className="invoice-summary-heading"><span>{noteLabel(noteKind).toUpperCase()} TOTALS</span><strong>{sourceInvoice.taxType === 'IGST' ? 'IGST' : 'CGST + SGST'}</strong></div>
               <dl className="invoice-summary-list"><div><dt>Returned quantity</dt><dd>{totals.totalQty}</dd></div><div><dt>Gross amount</dt><dd>{money(totals.subtotal)}</dd></div><div><dt>Line discount</dt><dd>−{money(totals.lineDiscountAmount)}</dd></div><div><dt>Bill discount share</dt><dd>−{money(totals.billDiscount)}</dd></div><div className="summary-taxable"><dt>Taxable amount</dt><dd>{money(totals.taxableAmount)}</dd></div>{sourceInvoice.taxType === 'IGST' ? <div><dt>IGST</dt><dd>{money(totals.igstAmount)}</dd></div> : <><div><dt>CGST</dt><dd>{money(totals.cgstAmount)}</dd></div><div><dt>SGST</dt><dd>{money(totals.sgstAmount)}</dd></div></>}<div><dt>Round off</dt><dd>{totals.roundOff >= 0 ? '+' : '−'}{money(Math.abs(totals.roundOff))}</dd></div><div className="grand-total-row"><dt>Grand total</dt><dd>{money(totals.grandTotal)}</dd></div></dl>
               <div className="return-note-integrity-copy"><strong>{noteKind === 'CREDIT' ? 'Stock will increase' : 'Stock will decrease'}</strong><span>{noteKind === 'CREDIT' ? 'Each line posts a SALE_RETURN stock transaction.' : 'Each line posts a PURCHASE_RETURN stock transaction after stock validation.'}</span></div>
-              <button className="primary-action-button return-note-save-button" type="button" disabled={isSaving || !requestedLines.length || Boolean(invalidQuantityItem) || settlementExceedsBalance || !sourceInvoice.items.length} onClick={() => void save()}>{isSaving ? 'Saving transaction…' : `Save ${noteLabel(noteKind)}`}</button>
+              <button className="primary-action-button return-note-save-button" type="button" disabled={isSaving || !isOnline || !requestedLines.length || Boolean(invalidQuantityItem) || settlementExceedsBalance || !sourceInvoice.items.length} onClick={() => void save()}>{isSaving ? 'Saving transaction…' : `Save ${noteLabel(noteKind)}`}</button>
               <button className="outline-button compact-action return-note-reset" type="button" disabled={isSaving} onClick={resetForm}>Clear return</button>
               {formError ? <p className="form-error" role="alert">{formError}</p> : null}
             </aside>

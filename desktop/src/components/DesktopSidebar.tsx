@@ -1,3 +1,4 @@
+import { useSyncStatus } from '../context/SyncStatusContext'
 import { BrandMark } from './BrandMark'
 
 export type DesktopPage = 'overview' | 'companies' | 'categories' | 'products' | 'stockAdjustment' | 'stockLedger' | 'parties' | 'quotations' | 'quotation' | 'salesInvoices' | 'purchaseInvoices' | 'salesInvoice' | 'purchaseInvoice' | 'creditNote' | 'debitNote' | 'payments' | 'recordPayment' | 'expenses' | 'expenseCategories' | 'documentSettings'
@@ -25,25 +26,41 @@ const navigation: Array<{ page: DesktopPage; icon: string; label: string }> = [
   { page: 'documentSettings', icon: '⚙', label: 'Settings' },
 ]
 
+const STOCK_ACTION_PAGES = new Set<DesktopPage>(['stockAdjustment', 'creditNote', 'debitNote'])
+
 export function DesktopSidebar({ activePage, onNavigate }: DesktopSidebarProps) {
+  const { connectionState, isOnline, pendingChanges } = useSyncStatus()
+  const syncCopy = pendingChanges > 0
+    ? `${pendingChanges} changes pending sync`
+    : connectionState === 'online'
+      ? 'Firestore live connection ready'
+      : connectionState === 'checking'
+        ? 'Checking Firestore connection…'
+        : 'Firestore offline — billing paused'
+
   return (
     <aside className="sidebar">
       <BrandMark />
       <nav aria-label="Desktop navigation">
-        {navigation.map((item) => (
-          <button
-            className={`nav-item ${activePage === item.page ? 'active' : ''}`}
-            type="button"
-            key={item.page}
-            onClick={() => onNavigate(item.page)}
-          >
-            <span>{item.icon}</span> {item.label}
-          </button>
-        ))}
+        {navigation.map((item) => {
+          const isBlockedStockAction = !isOnline && STOCK_ACTION_PAGES.has(item.page)
+          return (
+            <button
+              className={`nav-item ${activePage === item.page ? 'active' : ''}`}
+              type="button"
+              key={item.page}
+              disabled={isBlockedStockAction}
+              title={isBlockedStockAction ? 'Billing requires internet connection to prevent stock conflicts. Please reconnect.' : undefined}
+              onClick={() => onNavigate(item.page)}
+            >
+              <span>{item.icon}</span> {item.label}
+            </button>
+          )
+        })}
         <button className="nav-item" type="button" disabled><span>▤</span> Reports</button>
       </nav>
       <div className="sidebar-foot">
-        <span className="live-dot" /> Firestore live connection ready
+        <span className="live-dot" /> {syncCopy}
       </div>
     </aside>
   )

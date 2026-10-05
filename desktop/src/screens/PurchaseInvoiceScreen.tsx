@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
+import { BILLING_CONNECTION_MESSAGE, useSyncStatus } from '../context/SyncStatusContext'
 import {
   calculateSalesInvoiceTotals,
   normalizeStateCode,
@@ -96,6 +98,7 @@ function paymentStatusLabel(status: CreatedPurchaseInvoice['paymentStatus']): st
 
 export function PurchaseInvoiceScreen({ onNavigate, onOpenInvoice }: PurchaseInvoiceScreenProps) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [parties, setParties] = useState<Party[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -253,6 +256,11 @@ export function PurchaseInvoiceScreen({ onNavigate, onOpenInvoice }: PurchaseInv
       resetInvoice()
       return
     }
+    if (!isOnline) {
+      setPriceUpdateDialogOpen(false)
+      setSaveError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
     if (!selectedParty) {
       setSaveError('Select a supplier before confirming the purchase invoice.')
       return
@@ -309,6 +317,10 @@ export function PurchaseInvoiceScreen({ onNavigate, onOpenInvoice }: PurchaseInv
       resetInvoice()
       return
     }
+    if (!isOnline) {
+      setSaveError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
     if (!selectedParty) {
       setSaveError('Select a supplier before confirming the purchase invoice.')
       return
@@ -345,6 +357,7 @@ export function PurchaseInvoiceScreen({ onNavigate, onOpenInvoice }: PurchaseInv
           </div>
         </header>
 
+        <BillingInternetNotice />
         {loadError ? <div className="settings-error" role="alert">{loadError}</div> : null}
         {isLoading ? <div className="settings-loading">Loading suppliers and catalog…</div> : null}
 
@@ -472,7 +485,7 @@ export function PurchaseInvoiceScreen({ onNavigate, onOpenInvoice }: PurchaseInv
                   <div className="balance-row"><dt>Supplier payable</dt><dd>{money(totals.balanceAmount)}</dd></div>
                 </dl>
                 <div className="invoice-save-actions">
-                  <button className="primary-action-button invoice-confirm-button" type="button" disabled={isSaving || lines.length === 0 || Boolean(loadError)} onClick={beginSave}>{isSaving ? 'Confirming atomically…' : savedInvoice ? 'Create another purchase' : 'Confirm purchase & increase stock'}</button>
+                  <button className="primary-action-button invoice-confirm-button" type="button" disabled={isSaving || (!savedInvoice && !isOnline) || lines.length === 0 || Boolean(loadError)} onClick={beginSave}>{isSaving ? 'Confirming atomically…' : savedInvoice ? 'Create another purchase' : 'Confirm purchase & increase stock'}</button>
                   {!savedInvoice ? <button className="outline-button compact-action" type="button" disabled={isSaving} onClick={resetInvoice}>Clear purchase</button> : null}
                 </div>
               </section>
@@ -500,8 +513,8 @@ export function PurchaseInvoiceScreen({ onNavigate, onOpenInvoice }: PurchaseInv
             </ul>
             <div className="dialog-actions purchase-price-actions">
               <button className="outline-button" type="button" onClick={() => setPriceUpdateDialogOpen(false)} disabled={isSaving}>Back</button>
-              <button className="outline-button" type="button" onClick={() => void save(false)} disabled={isSaving}>Keep current prices</button>
-              <button className="primary-action-button" type="button" onClick={() => void save(true)} disabled={isSaving}>{isSaving ? 'Confirming…' : 'Update prices & confirm'}</button>
+              <button className="outline-button" type="button" onClick={() => void save(false)} disabled={isSaving || !isOnline}>Keep current prices</button>
+              <button className="primary-action-button" type="button" onClick={() => void save(true)} disabled={isSaving || !isOnline}>{isSaving ? 'Confirming…' : 'Update prices & confirm'}</button>
             </div>
           </section>
         </div>

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
+import { BILLING_CONNECTION_MESSAGE, useSyncStatus } from '../context/SyncStatusContext'
 import { quotationStatusLabel } from '../lib/quotationUtils'
 import { setQuotationStatus, subscribeToQuotationDetail } from '../repositories/quotationsRepository'
 import type { QuotationDetail, QuotationStatus } from '../types/quotation'
@@ -36,6 +38,7 @@ export function QuotationDetailScreen({
   onOpenInvoice,
 }: QuotationDetailScreenProps) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -79,12 +82,21 @@ export function QuotationDetailScreen({
     }
   }
 
+  const convertToSalesInvoice = () => {
+    if (!quotation) return
+    if (!isOnline) {
+      setActionError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
+    onConvertToSalesInvoice(quotation)
+  }
+
   const statusActions = () => {
     if (!quotation || quotation.status === 'CONVERTED' || quotation.status === 'REJECTED' || quotation.status === 'EXPIRED') return null
     if (quotation.status === 'ACCEPTED') {
       return (
         <div className="quotation-detail-actions">
-          <button className="primary-action-button" type="button" onClick={() => onConvertToSalesInvoice(quotation)}>Convert to Sales Invoice</button>
+          <button className="primary-action-button" type="button" disabled={!isOnline} onClick={convertToSalesInvoice}>Convert to Sales Invoice</button>
           <button className="outline-button compact-action" type="button" disabled={Boolean(changingStatus)} onClick={() => void changeStatus('REJECTED')}>{changingStatus === 'REJECTED' ? 'Updating…' : 'Reject'}</button>
           <button className="outline-button compact-action" type="button" disabled={Boolean(changingStatus)} onClick={() => void changeStatus('EXPIRED')}>{changingStatus === 'EXPIRED' ? 'Updating…' : 'Mark expired'}</button>
         </div>
@@ -117,6 +129,7 @@ export function QuotationDetailScreen({
           </div>
         </header>
 
+        <BillingInternetNotice />
         {loadError ? <div className="settings-error" role="alert">{loadError}</div> : null}
         {isLoading ? <div className="settings-loading">Loading quotation snapshots…</div> : null}
         {!isLoading && !loadError && !quotation ? <section className="empty-master-state"><div className="empty-icon" aria-hidden="true">?</div><h2>Quotation not found</h2><p>It may have been removed in another client.</p><button className="primary-action-button" type="button" onClick={onBack}>Back to quotations</button></section> : null}

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { BillingInternetNotice } from '../components/BillingInternetNotice'
 import { DesktopSidebar, type DesktopPage } from '../components/DesktopSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useBusiness } from '../context/BusinessContext'
+import { BILLING_CONNECTION_MESSAGE, useSyncStatus } from '../context/SyncStatusContext'
 import { buildCategoryTree } from '../lib/categoryTree'
 import { PRODUCT_UNITS, displayProductCategory, isLowStock, searchableProductText } from '../lib/productUtils'
 import { subscribeToCategories } from '../repositories/categoriesRepository'
@@ -105,6 +107,7 @@ function ProductEditor({
   categories,
   uid,
   businessId,
+  isOnline,
   onClose,
 }: {
   product: Product | null
@@ -113,6 +116,7 @@ function ProductEditor({
   categories: Category[]
   uid: string
   businessId: string
+  isOnline: boolean
   onClose: () => void
 }) {
   const [draft, setDraft] = useState<ProductDraft>(() => (product ? draftFromProduct(product) : emptyProductDraft(companies)))
@@ -157,6 +161,11 @@ function ProductEditor({
   }
 
   const save = async () => {
+    if (!product && !isOnline) {
+      setError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
+
     const mrp = nonNegativeNumber(draft.mrp)
     const purchasePrice = nonNegativeNumber(draft.purchasePrice)
     const discountPercent = nonNegativeNumber(draft.discountPercent)
@@ -362,10 +371,11 @@ function ProductEditor({
         </div>
       </section>
 
+      {!product && !isOnline ? <p className="form-error" role="alert">{BILLING_CONNECTION_MESSAGE}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       <div className="editor-actions product-editor-actions">
         <button className="outline-button" type="button" onClick={onClose}>Cancel</button>
-        <button className="primary-action-button" type="button" onClick={() => void save()} disabled={isSaving}>
+        <button className="primary-action-button" type="button" onClick={() => void save()} disabled={isSaving || (!product && !isOnline)}>
           {isSaving ? 'Saving…' : product ? 'Save product' : 'Create product'}
         </button>
       </div>
@@ -377,17 +387,23 @@ function DeleteProductDialog({
   product,
   uid,
   businessId,
+  isOnline,
   onClose,
 }: {
   product: Product
   uid: string
   businessId: string
+  isOnline: boolean
   onClose: () => void
 }) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const remove = async () => {
+    if (!isOnline) {
+      setError(BILLING_CONNECTION_MESSAGE)
+      return
+    }
     setIsDeleting(true)
     setError(null)
     try {
@@ -406,10 +422,11 @@ function DeleteProductDialog({
         <div className="dialog-icon danger" aria-hidden="true">!</div>
         <h2 id="delete-product-title">Delete {product.name}?</h2>
         <p>This removes the product from the catalog. Existing stock transaction history is retained for audit purposes.</p>
+        {!isOnline ? <p className="form-error" role="alert">{BILLING_CONNECTION_MESSAGE}</p> : null}
         {error ? <p className="form-error" role="alert">{error}</p> : null}
         <div className="dialog-actions">
           <button className="outline-button" type="button" onClick={onClose} disabled={isDeleting}>Cancel</button>
-          <button className="danger-action-button" type="button" onClick={() => void remove()} disabled={isDeleting}>
+          <button className="danger-action-button" type="button" onClick={() => void remove()} disabled={isDeleting || !isOnline}>
             {isDeleting ? 'Deleting…' : 'Delete product'}
           </button>
         </div>
@@ -420,6 +437,7 @@ function DeleteProductDialog({
 
 export function ProductsScreen({ onNavigate }: ProductsScreenProps) {
   const { user, signOut } = useAuth()
+  const { isOnline } = useSyncStatus()
   const { selectedBusiness, selectedBusinessId, clearBusinessSelection } = useBusiness()
   const [products, setProducts] = useState<Product[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
@@ -516,7 +534,7 @@ export function ProductsScreen({ onNavigate }: ProductsScreenProps) {
           </div>
           <div className="header-actions">
             <button className="outline-button" type="button" onClick={() => onNavigate('stockLedger')}>Stock ledger</button>
-            <button className="outline-button" type="button" onClick={() => onNavigate('stockAdjustment')}>± Adjust stock</button>
+            <button className="outline-button" type="button" disabled={!isOnline} onClick={() => onNavigate('stockAdjustment')}>± Adjust stock</button>
             <button className="outline-button" type="button" onClick={clearBusinessSelection}>Switch business</button>
             <button className="user-button" type="button" onClick={() => void signOut()} title="Sign out">
               {(user.displayName ?? user.email ?? 'U').slice(0, 1).toUpperCase()}
@@ -524,13 +542,15 @@ export function ProductsScreen({ onNavigate }: ProductsScreenProps) {
           </div>
         </header>
 
+        <BillingInternetNotice />
+
         <section className="management-toolbar product-toolbar">
           <div>
             <span className="status-chip"><span className="live-dot" /> Live Firestore catalog</span>
             <h2>{filteredProducts.length} of {products.length} products</h2>
             <p>Opening stock creates an immutable stock-ledger baseline.</p>
           </div>
-          <button className="primary-action-button" type="button" onClick={() => setEditorTarget('new')}>＋ Add product</button>
+          <button className="primary-action-button" type="button" disabled={!isOnline} onClick={() => setEditorTarget('new')}>＋ Add product</button>
         </section>
 
         <section className="product-filter-bar" aria-label="Product filters">
@@ -602,7 +622,7 @@ export function ProductsScreen({ onNavigate }: ProductsScreenProps) {
                           </td>
                           <td className="row-actions">
                             <button className="row-action-button" type="button" onClick={() => setEditorTarget(product)}>Edit</button>
-                            <button className="row-action-button danger-text" type="button" onClick={() => setDeleteTarget(product)}>Delete</button>
+                            <button className="row-action-button danger-text" type="button" disabled={!isOnline} onClick={() => setDeleteTarget(product)}>Delete</button>
                           </td>
                         </tr>
                       )
@@ -623,7 +643,7 @@ export function ProductsScreen({ onNavigate }: ProductsScreenProps) {
               <div className="empty-icon" aria-hidden="true">▤</div>
               <h2>No products yet</h2>
               <p>Create the first product and its opening stock ledger entry together.</p>
-              <button className="primary-action-button" type="button" onClick={() => setEditorTarget('new')}>Add first product</button>
+              <button className="primary-action-button" type="button" disabled={!isOnline} onClick={() => setEditorTarget('new')}>Add first product</button>
             </section>
           )
         ) : null}
@@ -638,11 +658,12 @@ export function ProductsScreen({ onNavigate }: ProductsScreenProps) {
             categories={categories}
             uid={user.uid}
             businessId={selectedBusinessId}
+            isOnline={isOnline}
             onClose={() => setEditorTarget(null)}
           />
         </div>
       ) : null}
-      {deleteTarget ? <DeleteProductDialog product={deleteTarget} uid={user.uid} businessId={selectedBusinessId} onClose={() => setDeleteTarget(null)} /> : null}
+      {deleteTarget ? <DeleteProductDialog product={deleteTarget} uid={user.uid} businessId={selectedBusinessId} isOnline={isOnline} onClose={() => setDeleteTarget(null)} /> : null}
     </main>
   )
 }
