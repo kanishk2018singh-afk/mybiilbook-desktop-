@@ -10,6 +10,8 @@ import { CategoriesScreen } from './screens/CategoriesScreen'
 import { CompaniesScreen } from './screens/CompaniesScreen'
 import { DocumentSettingsScreen } from './screens/DocumentSettingsScreen'
 import { ProductsScreen } from './screens/ProductsScreen'
+import { StockAdjustmentScreen } from './screens/StockAdjustmentScreen'
+import { StockLedgerScreen } from './screens/StockLedgerScreen'
 import { PartiesScreen } from './screens/PartiesScreen'
 import { PartyDetailScreen } from './screens/PartyDetailScreen'
 import { SalesInvoiceScreen } from './screens/SalesInvoiceScreen'
@@ -81,6 +83,8 @@ export default function App() {
   if (page === 'companies') return <CompaniesScreen onNavigate={navigate} />
   if (page === 'categories') return <CategoriesScreen onNavigate={navigate} />
   if (page === 'products') return <ProductsScreen onNavigate={navigate} />
+  if (page === 'stockAdjustment') return <StockAdjustmentScreen onNavigate={navigate} />
+  if (page === 'stockLedger') return <StockLedgerScreen onNavigate={navigate} />
   if (page === 'salesInvoices') return <InvoiceListScreen kind="SALE" onNavigate={navigate} onOpenInvoice={openInvoice} />
   if (page === 'purchaseInvoices') return <InvoiceListScreen kind="PURCHASE" onNavigate={navigate} onOpenInvoice={openInvoice} />
   if (page === 'quotation') return <QuotationScreen onNavigate={navigate} onOpenQuotation={(id) => { setSelectedQuotationId(id); setPage('quotationDetail') }} />

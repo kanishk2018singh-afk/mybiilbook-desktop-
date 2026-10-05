@@ -18,3 +18,7 @@ Quotations are separate, non-posting customer offers. They save immutable item, 
 ## Credit notes and debit notes
 
 The desktop return workflow now posts sales returns as **Credit Notes** and purchase returns as **Debit Notes**. Both workflows use the original confirmed invoice’s immutable item snapshots to calculate returned taxable value, GST, and grand total. Credit Notes restore stock with `SALE_RETURN` entries; Debit Notes validate available stock before reducing it with `PURCHASE_RETURN` entries. A return can reduce the source invoice balance, create a matching refund payment, or remain as an on-account party credit/debit. Each note, item snapshot, stock movement, optional payment, source-invoice audit update, and document-number reservation is committed in one Firestore transaction.
+
+## Stock adjustments and stock ledger
+
+The desktop inventory tools include transaction-safe **Stock Adjustments** and a product-level **Stock Ledger**. Adjustments use signed quantities (`+` stock-in / `−` stock-out), require an audit reason, update `products.stockQty`, and write matching `ADJUSTMENT_IN` or `ADJUSTMENT_OUT` ledger rows in the same Firestore transaction. The Stock Ledger presents all movements in chronological passbook order and calculates the balance as: Opening + Purchase + Sales Return − Sales − Purchase Return ± Adjustment − Damage.

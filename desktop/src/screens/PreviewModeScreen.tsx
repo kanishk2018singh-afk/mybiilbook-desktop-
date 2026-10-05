@@ -21,6 +21,14 @@ const pageCopy: Partial<Record<DesktopPage, { title: string; description: string
     title: 'Products',
     description: 'Your product catalog, opening stock, and stock history will appear here after authentication is re-enabled.',
   },
+  stockAdjustment: {
+    title: 'Stock adjustment',
+    description: 'The transaction-safe stock-in and stock-out correction form will appear here after authentication is re-enabled.',
+  },
+  stockLedger: {
+    title: 'Stock ledger',
+    description: 'The chronological inventory passbook and running-balance reconciliation report will appear here after authentication is re-enabled.',
+  },
   parties: {
     title: 'Parties',
     description: 'Customer and supplier balances will appear here after authentication is re-enabled.',

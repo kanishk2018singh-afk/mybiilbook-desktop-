@@ -1,6 +1,6 @@
 import { BrandMark } from './BrandMark'
 
-export type DesktopPage = 'overview' | 'companies' | 'categories' | 'products' | 'parties' | 'quotations' | 'quotation' | 'salesInvoices' | 'purchaseInvoices' | 'salesInvoice' | 'purchaseInvoice' | 'creditNote' | 'debitNote' | 'payments' | 'recordPayment' | 'documentSettings'
+export type DesktopPage = 'overview' | 'companies' | 'categories' | 'products' | 'stockAdjustment' | 'stockLedger' | 'parties' | 'quotations' | 'quotation' | 'salesInvoices' | 'purchaseInvoices' | 'salesInvoice' | 'purchaseInvoice' | 'creditNote' | 'debitNote' | 'payments' | 'recordPayment' | 'documentSettings'
 
 interface DesktopSidebarProps {
   activePage: DesktopPage
@@ -12,6 +12,8 @@ const navigation: Array<{ page: DesktopPage; icon: string; label: string }> = [
   { page: 'companies', icon: '◈', label: 'Companies' },
   { page: 'categories', icon: '⌘', label: 'Categories' },
   { page: 'products', icon: '▤', label: 'Products' },
+  { page: 'stockAdjustment', icon: '±', label: 'Stock adjustment' },
+  { page: 'stockLedger', icon: '≡', label: 'Stock ledger' },
   { page: 'parties', icon: '◎', label: 'Parties' },
   { page: 'quotations', icon: '◌', label: 'Quotations' },
   { page: 'salesInvoices', icon: '↗', label: 'Sales invoices' },
@@ -37,7 +39,6 @@ export function DesktopSidebar({ activePage, onNavigate }: DesktopSidebarProps) 
             <span>{item.icon}</span> {item.label}
           </button>
         ))}
-        <button className="nav-item" type="button" disabled><span>□</span> Inventory</button>
         <button className="nav-item" type="button" disabled><span>▤</span> Reports</button>
       </nav>
       <div className="sidebar-foot">

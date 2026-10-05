@@ -346,7 +346,7 @@ function ProductEditor({
           {product ? (
             <div className="stock-lock-note">
               <strong>Current stock: {product.stockQty} {product.unit || 'PCS'}</strong>
-              <span>Stock can only be changed via Purchase/Sale/Adjustment.</span>
+              <span>Stock can only be changed via Purchase, Sale, Return, or Adjustment.</span>
             </div>
           ) : (
             <label className="form-field">
@@ -515,6 +515,8 @@ export function ProductsScreen({ onNavigate }: ProductsScreenProps) {
             <p>{selectedBusiness.name} · Catalog, pricing, company, category, and current stock visibility.</p>
           </div>
           <div className="header-actions">
+            <button className="outline-button" type="button" onClick={() => onNavigate('stockLedger')}>Stock ledger</button>
+            <button className="outline-button" type="button" onClick={() => onNavigate('stockAdjustment')}>± Adjust stock</button>
             <button className="outline-button" type="button" onClick={clearBusinessSelection}>Switch business</button>
             <button className="user-button" type="button" onClick={() => void signOut()} title="Sign out">
               {(user.displayName ?? user.email ?? 'U').slice(0, 1).toUpperCase()}

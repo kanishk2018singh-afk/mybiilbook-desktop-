@@ -78,6 +78,13 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
                 <p>{description}</p>
                 <span className="coming-soon">Open purchase register →</span>
               </button>
+            ) : title === 'Stock' ? (
+              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('stockLedger')}>
+                <span className="module-icon" aria-hidden="true">{icon}</span>
+                <h2>{title}</h2>
+                <p>{description}</p>
+                <span className="coming-soon">Open stock ledger →</span>
+              </button>
             ) : title === 'Quotations' ? (
               <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('quotations')}>
                 <span className="module-icon" aria-hidden="true">{icon}</span>

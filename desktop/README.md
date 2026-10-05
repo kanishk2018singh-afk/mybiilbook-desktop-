@@ -53,7 +53,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, Sales/Purchase Invoice confirmation or cancellation, and Credit/Debit Note return posting are the limited write operations added so far.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, Sales/Purchase Invoice confirmation or cancellation, Credit/Debit Note return posting, and Stock Adjustments are the limited write operations added so far.
 
 ## Data flow
 
@@ -317,3 +317,18 @@ Settlement choices are explicit:
 - **Leave on account** retains the return as a party credit/debit.
 
 The Party Ledger includes credit/debit-note effects, so on-account notes and their refund payments remain balanced. Firestore rules must permit the business-scoped `creditNotes`, `debitNotes`, their `items` subcollections, source-invoice `returnBalances` subcollections, and the existing products, stockTransactions, payments, and invoice collections.
+
+## Stock Adjustments and Stock Ledger
+
+The **Stock Adjustment** screen is the only direct inventory-correction workflow. It selects a live product, accepts a non-zero signed quantity (`+` adds stock; `−` removes stock), requires an audit reason, and accepts an optional note. `createStockAdjustment()` runs one Firestore transaction that reads the current product, rejects a stock-out that would go negative, updates `products.stockQty`, and writes the matching `stockTransactions` row as `ADJUSTMENT_IN` or `ADJUSTMENT_OUT` with its resulting `balanceAfter`.
+
+The **Stock Ledger** is a real-time, product-scoped inventory passbook. It reads every `stockTransactions` record for the selected product and sorts client-side in chronological order so it does not require a compound Firestore index. Its running balance is calculated from movement quantities rather than trusting a stored balance field, and the report reconciles that result against the live product `stockQty`.
+
+```text
+Current stock = Opening + Purchase + Sales Return
+              - Sales - Purchase Return
+              + Adjustment In - Adjustment Out - Damage
+              + any legacy/other movement
+```
+
+The ledger recognizes `OPENING`, `PURCHASE`, `SALE`, `SALE_RETURN`, `PURCHASE_RETURN`, `ADJUSTMENT_IN`, `ADJUSTMENT_OUT`, and `DAMAGE` rows, including previously migrated entries that use a signed quantity instead of explicit `quantityIn` / `quantityOut` fields.
