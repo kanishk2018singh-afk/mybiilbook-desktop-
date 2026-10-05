@@ -17,6 +17,7 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - Purchase Invoice creation with supplier references, stock increases, linked payments, and optional cost-price updates
 - Live Sales/Purchase invoice registers, immutable detail/payment history, stock-safe cancellation, and GST PDF export
 - Live Expenses register, expense-category masters, date/category totals, and a category-wise Recharts pie chart
+- A live Home Dashboard with sales/purchase/cash/party metrics, sales trend, top products, low-stock alerts, and GST summary
 
 Other dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, product/stock-baseline creation, Sales/Purchase Invoice confirmation or cancellation, and Expenses are the intentional, scoped Firestore write workflows.
 
@@ -353,3 +354,16 @@ users/{uid}/businesses/{businessId}/expenses/{expenseId}
 with a date, category ID and category-name snapshot, positive amount, payment mode, `paidTo`, optional reference number, and optional note. New entries require date, category, amount, mode, and payee; create, edit, and delete use ordinary document writes. The category name is deliberately copied into each expense, so category-wise reports remain understandable after a category is renamed or deactivated.
 
 The live register uses client-side inclusive date-range, category, and payment-mode filters, avoiding extra Firestore composite indexes. Its total card, grouped category totals, and Recharts pie chart are all calculated from the same filtered entries, so the displayed distribution always reconciles to the register total.
+
+## Home Dashboard and GST summary
+
+The **Overview** page is a live, selected-business dashboard. It subscribes to the business-scoped `salesInvoices`, `purchaseInvoices`, `payments`, and `products` collections and derives all headline figures client-side:
+
+- **Today’s Sales**, **This Month’s Sales**, and **Today’s Purchases** are sums of confirmed invoice `grandTotal` values using the saved business date.
+- **Receivables** and **Payables** are the `balanceAmount` sums of confirmed invoices with `UNPAID` or `PARTIAL` payment status.
+- **Cash in Hand estimate** is `CASH IN payments − CASH OUT payments`; it is an operational cash-flow estimate, not a reconciled bank/cashbook closing balance.
+- **Low stock** uses the shared `stockQty <= lowStockAlert` product rule.
+
+Invoice item documents live under each Sales Invoice (`salesInvoices/{invoiceId}/items`) and do not currently persist a `businessId` field. A Firestore `collectionGroup('items')` query therefore cannot safely isolate a single active business without a schema migration. `subscribeToDashboardData()` instead subscribes to the immutable `items` subcollection of every **confirmed Sales Invoice** in the selected business and aggregates those snapshots client-side. That yields the all-time Top 5 selling products by quantity while preserving multi-business isolation and excluding cancelled invoices.
+
+The sales line chart always renders the last 30 local calendar days, including zero-sales days. The GST Summary has a user-selected inclusive date range (default: current month) and separately totals confirmed Sales and Purchase header `cgstAmount`, `sgstAmount`, and `igstAmount`. Sales are labelled as output tax collected; purchases are shown separately as input-tax figures for return preparation. Cancelled invoices are excluded from every dashboard and GST aggregate.

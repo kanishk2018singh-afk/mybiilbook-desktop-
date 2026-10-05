@@ -26,3 +26,7 @@ The desktop inventory tools include transaction-safe **Stock Adjustments** and a
 ## Expenses and category analysis
 
 The **Expenses** workspace provides business-scoped CRUD for expense categories and expense entries. Create heads such as Rent, Salary, Electricity, Internet, Transport, Repairs, and Office supplies, then record the date, category, amount, payment mode, payee, reference number, and note for each outgoing cost. The live register filters by inclusive date range, category, and payment mode; its category totals and Recharts pie chart always use the same filtered records. Expense entries snapshot their category name so historical reports remain legible after a category is renamed or made inactive.
+
+## Home Dashboard
+
+The live **Home Dashboard** turns the selected business’s confirmed invoice, payment, product, and sales-item data into today/month sales, today’s purchases, outstanding receivables/payables, and a cash-in-hand estimate based on CASH payments. It also provides a zero-filled 30-day sales trend, all-time top-selling products, low-stock alerts, and a selected-date-range GST report with Sales output tax and Purchase input tax separated into CGST, SGST, and IGST. All figures exclude cancelled invoices and are scoped to the active business.
