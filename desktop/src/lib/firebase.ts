@@ -19,6 +19,9 @@ const requiredConfigKeys: Array<keyof FirebaseOptions> = ['apiKey', 'authDomain'
 
 export const isFirebaseConfigured = requiredConfigKeys.every((key) => Boolean(firebaseConfig[key]))
 
+/** A local-only, unauthenticated UI walkthrough. It never reads or writes Firestore. */
+export const isDesktopPreviewMode = import.meta.env.VITE_DESKTOP_PREVIEW_MODE === 'true'
+
 const firebaseApp = isFirebaseConfigured ? (getApps().length ? getApp() : initializeApp(firebaseConfig)) : null
 
 export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : null

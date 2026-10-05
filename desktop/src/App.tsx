@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DesktopPage } from './components/DesktopSidebar'
 import { useAuth } from './context/AuthContext'
 import { useBusiness } from './context/BusinessContext'
-import { isFirebaseConfigured } from './lib/firebase'
+import { isDesktopPreviewMode, isFirebaseConfigured } from './lib/firebase'
 import { BusinessErrorScreen } from './screens/BusinessErrorScreen'
 import { BusinessPickerScreen } from './screens/BusinessPickerScreen'
 import { DashboardShell } from './screens/DashboardShell'
@@ -21,6 +21,7 @@ import { EmptyBusinessesScreen } from './screens/EmptyBusinessesScreen'
 import { FirebaseSetupScreen } from './screens/FirebaseSetupScreen'
 import { LoadingScreen } from './screens/LoadingScreen'
 import { SignInScreen } from './screens/SignInScreen'
+import { PreviewModeScreen } from './screens/PreviewModeScreen'
 
 type AppRoute = DesktopPage | 'partyDetail' | 'invoiceDetail'
 
@@ -37,6 +38,10 @@ export default function App() {
     setSelectedPartyId(null)
     setSelectedInvoice(null)
   }, [selectedBusinessId])
+
+  // Preview Mode is deliberately isolated from live Firebase access so the UI can
+  // be reviewed while Google authentication is temporarily unavailable.
+  if (isDesktopPreviewMode) return <PreviewModeScreen />
 
   if (!isFirebaseConfigured || status === 'configurationError') return <FirebaseSetupScreen />
   if (status === 'loading') return <LoadingScreen />

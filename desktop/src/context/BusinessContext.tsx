@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAuth } from './AuthContext'
 import { subscribeToBusinesses } from '../repositories/businessRepository'
+import { isDesktopPreviewMode } from '../lib/firebase'
 import type { Business } from '../types/business'
 
 type BusinessStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -36,7 +37,9 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
     setSelectedBusinessId(null)
     setError(null)
 
-    if (!user) {
+    // Preview Mode is intentionally disconnected from all business-scoped
+    // Firestore subscriptions, even if an older Firebase session exists.
+    if (!user || isDesktopPreviewMode) {
       setStatus('idle')
       return
     }
