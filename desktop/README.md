@@ -16,8 +16,9 @@ A secure Electron + React + TypeScript desktop companion for the Android Showroo
 - Sales Invoice creation with live GST/payment totals and one atomic Firestore commit
 - Purchase Invoice creation with supplier references, stock increases, linked payments, and optional cost-price updates
 - Live Sales/Purchase invoice registers, immutable detail/payment history, stock-safe cancellation, and GST PDF export
+- Live Expenses register, expense-category masters, date/category totals, and a category-wise Recharts pie chart
 
-Dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, product/stock-baseline creation, and Sales/Purchase Invoice confirmation or cancellation are the intentional, scoped Firestore write workflows.
+Other dashboard reporting modules remain read-only. Document settings, number reservation, master-data maintenance, product/stock-baseline creation, Sales/Purchase Invoice confirmation or cancellation, and Expenses are the intentional, scoped Firestore write workflows.
 
 ## Run locally
 
@@ -43,7 +44,7 @@ npm run dist
 3. Copy the Web app's `firebaseConfig` fields to `desktop/.env`.
 4. In **Authentication → Sign-in method**, enable **Google**.
 5. In **Authentication → Settings → Authorized domains**, add `localhost` and `127.0.0.1` for local/Electron development. The packaged desktop app serves its renderer over a loopback HTTP origin because Firebase's browser Auth SDK does not support `file://` OAuth.
-6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, `stockTransactions`, `parties`, `salesInvoices`, `purchaseInvoices`, invoice `items`, `payments`, `invoicePayments`, `creditNotes`, `debitNotes`, their `items` documents, and source-invoice `returnBalances` documents used by invoice/return workflows.
+6. Ensure Firestore rules allow the signed-in user to read their own data and write their own `documentSettings`, `companies`, `categories`, `products`, `stockTransactions`, `parties`, `salesInvoices`, `purchaseInvoices`, invoice `items`, `payments`, `invoicePayments`, `expenseCategories`, `expenses`, `creditNotes`, `debitNotes`, their `items` documents, and source-invoice `returnBalances` documents used by invoice/return workflows.
 
 Example development rule shape:
 
@@ -53,7 +54,7 @@ match /users/{uid}/businesses/{businessId}/{document=**} {
 }
 ```
 
-Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, Sales/Purchase Invoice confirmation or cancellation, Credit/Debit Note return posting, and Stock Adjustments are the limited write operations added so far.
+Do not change the shared rule to `allow write: if false` solely for desktop: that would also prevent the Android app from writing. Dashboard reporting modules are read-only; document settings, atomic sequence reservation, Companies/Categories master data, Products with their opening stock baseline, Party masters, Sales/Purchase Invoice confirmation or cancellation, Credit/Debit Note return posting, Stock Adjustments, and Expense Categories/Entries are the limited write operations added so far.
 
 ## Data flow
 
@@ -332,3 +333,23 @@ Current stock = Opening + Purchase + Sales Return
 ```
 
 The ledger recognizes `OPENING`, `PURCHASE`, `SALE`, `SALE_RETURN`, `PURCHASE_RETURN`, `ADJUSTMENT_IN`, `ADJUSTMENT_OUT`, and `DAMAGE` rows, including previously migrated entries that use a signed quantity instead of explicit `quantityIn` / `quantityOut` fields.
+
+## Expenses and category-wise distribution
+
+The **Expenses** sidebar entry opens a business-scoped outgoing-cost register. Expense category masters are stored at:
+
+```text
+users/{uid}/businesses/{businessId}/expenseCategories/{categoryId}
+```
+
+with `name`, `description`, and `isActive`. Use **Manage categories** to create, edit, deactivate, or delete heads such as Rent, Salary, Electricity, Internet, Transport, Repairs, and Office supplies. Category deletion is blocked while an expense references that category, which keeps historical reporting intact. Categories use a real-time `onSnapshot()` list and ordinary `addDoc`, `updateDoc`, and `deleteDoc` master-data writes.
+
+Expense entries are stored at:
+
+```text
+users/{uid}/businesses/{businessId}/expenses/{expenseId}
+```
+
+with a date, category ID and category-name snapshot, positive amount, payment mode, `paidTo`, optional reference number, and optional note. New entries require date, category, amount, mode, and payee; create, edit, and delete use ordinary document writes. The category name is deliberately copied into each expense, so category-wise reports remain understandable after a category is renamed or deactivated.
+
+The live register uses client-side inclusive date-range, category, and payment-mode filters, avoiding extra Firestore composite indexes. Its total card, grouped category totals, and Recharts pie chart are all calculated from the same filtered entries, so the displayed distribution always reconciles to the register total.

@@ -24,6 +24,8 @@ import { QuotationDetailScreen } from './screens/QuotationDetailScreen'
 import { ReturnNoteScreen } from './screens/ReturnNoteScreen'
 import { PaymentsListScreen } from './screens/PaymentsListScreen'
 import { RecordPaymentScreen } from './screens/RecordPaymentScreen'
+import { ExpensesScreen } from './screens/ExpensesScreen'
+import { ExpenseCategoriesScreen } from './screens/ExpenseCategoriesScreen'
 import type { InvoiceKind } from './types/invoice'
 import type { QuotationConversionDraft, QuotationDetail } from './types/quotation'
 import { quotationToSalesInvoiceDraft } from './repositories/quotationsRepository'
@@ -131,6 +133,8 @@ export default function App() {
   }
   if (page === 'payments') return <PaymentsListScreen onNavigate={navigate} />
   if (page === 'recordPayment') return <RecordPaymentScreen onNavigate={navigate} />
+  if (page === 'expenses') return <ExpensesScreen onNavigate={navigate} />
+  if (page === 'expenseCategories') return <ExpenseCategoriesScreen onNavigate={navigate} />
   if (page === 'documentSettings') return <DocumentSettingsScreen onNavigate={navigate} />
 
   return <DashboardShell onNavigate={navigate} />

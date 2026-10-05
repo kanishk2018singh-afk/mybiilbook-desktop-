@@ -8,6 +8,7 @@ const foundationModules = [
   ['Purchases', 'Supplier bills and stock-in', '↙'],
   ['Quotations', 'Customer offers and conversion', '◌'],
   ['Payments', 'Receipts, payouts, and allocations', '₹'],
+  ['Expenses', 'Operating costs and category analysis', '◒'],
   ['Stock', 'Inventory and low-stock alerts', '□'],
   ['Parties', 'Receivables and payables', '◎'],
   ['Reports', 'Showroom performance', '▤'],
@@ -98,6 +99,13 @@ export function DashboardShell({ onNavigate }: { onNavigate: (page: DesktopPage)
                 <h2>{title}</h2>
                 <p>{description}</p>
                 <span className="coming-soon">Open payment register →</span>
+              </button>
+            ) : title === 'Expenses' ? (
+              <button className="module-card settings-module-card" type="button" key={title} onClick={() => onNavigate('expenses')}>
+                <span className="module-icon" aria-hidden="true">{icon}</span>
+                <h2>{title}</h2>
+                <p>{description}</p>
+                <span className="coming-soon">Open expense register →</span>
               </button>
             ) : (
               <article className="module-card" key={title}>

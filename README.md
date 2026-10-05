@@ -22,3 +22,7 @@ The desktop return workflow now posts sales returns as **Credit Notes** and purc
 ## Stock adjustments and stock ledger
 
 The desktop inventory tools include transaction-safe **Stock Adjustments** and a product-level **Stock Ledger**. Adjustments use signed quantities (`+` stock-in / `−` stock-out), require an audit reason, update `products.stockQty`, and write matching `ADJUSTMENT_IN` or `ADJUSTMENT_OUT` ledger rows in the same Firestore transaction. The Stock Ledger presents all movements in chronological passbook order and calculates the balance as: Opening + Purchase + Sales Return − Sales − Purchase Return ± Adjustment − Damage.
+
+## Expenses and category analysis
+
+The **Expenses** workspace provides business-scoped CRUD for expense categories and expense entries. Create heads such as Rent, Salary, Electricity, Internet, Transport, Repairs, and Office supplies, then record the date, category, amount, payment mode, payee, reference number, and note for each outgoing cost. The live register filters by inclusive date range, category, and payment mode; its category totals and Recharts pie chart always use the same filtered records. Expense entries snapshot their category name so historical reports remain legible after a category is renamed or made inactive.

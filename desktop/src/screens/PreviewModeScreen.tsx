@@ -65,6 +65,14 @@ const pageCopy: Partial<Record<DesktopPage, { title: string; description: string
     title: 'Record payment',
     description: 'The independent payment form and multi-invoice allocation workflow will appear here after authentication is re-enabled.',
   },
+  expenses: {
+    title: 'Expenses',
+    description: 'The operating expense register, date-range report, category totals, and category-wise pie chart will appear here after authentication is re-enabled.',
+  },
+  expenseCategories: {
+    title: 'Expense categories',
+    description: 'The Rent, Salary, Electricity, and other expense-head management tools will appear here after authentication is re-enabled.',
+  },
   documentSettings: {
     title: 'Document settings',
     description: 'Shared document numbering will appear here after authentication is re-enabled.',
