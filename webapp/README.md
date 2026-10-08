@@ -260,7 +260,7 @@ Database **v4** adds deletion markers; existing company data is upgraded in plac
 
 ## POS, OCR and responsive layout
 
-Home / More → **POS** opens a searchable catalogue, barcode input, customer selection and cart. Checkout records a paid or customer-credit sale through the existing invoice/stock engine and opens the printable receipt. Use the detailed bill editor for discounts or partial payment.
+Home / More → **POS** opens a searchable catalogue, barcode input, customer selection and cart. Checkout records a paid or customer-credit sale through the existing invoice/stock engine and opens the printable receipt. Item defaults are shown in the catalogue; edit each item’s discount percentage directly in the cart (0 removes it). An extra bill discount supports percent or rupees, applies after item discounts and before GST, and is shown separately in the total. POS changes apply to that sale only. Use the detailed bill editor for rates or partial payment.
 
 Home / More → **Scan bill (OCR)** reads printed JPG/PNG/WebP bills locally with Tesseract.js. English and Hindi are supported; downloading the OCR engine/language requires internet (including for the single HTML build). PDFs and handwriting are not supported. Text stays editable. Only rows shaped like `Name Qty Rate Amount` with matching arithmetic become suggestions; GST starts at zero and must be checked. OCR never saves a bill automatically. Suggestions have no inventory link: replace them with catalogue items in the draft to update stock. Retained OCR source text appears in bill notes; edit/remove it before printing as needed.
 

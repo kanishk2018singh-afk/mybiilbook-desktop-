@@ -1,6 +1,6 @@
 import { db, ShowroomDB, seedDatabase, getBusiness } from '../src/lib/db'
 import * as repo from '../src/lib/repo'
-import { lineFromItem } from '../src/lib/calc'
+import { computeTotals, lineFromItem } from '../src/lib/calc'
 import { buildSnapshot, mergeSnapshot as mergeCompleteSnapshot } from '../src/lib/sync'
 import { csvEscape, parseCsvText } from '../src/lib/csvutil'
 import * as auth from '../src/lib/auth'
@@ -32,6 +32,7 @@ export async function runRegressions(check: Check) {
   check('regression: CSV-style updates preserve sync identity', (await db.items.get(item.id!))?.syncId === item.syncId)
   const ocrLines = suggestPurchaseLines('Basin 2 500 1000\nTap 1 1,200.50 1,200.50\nGrand Total 3 500 1500\nWrong 2 500 900\nLoose text')
   check('OCR: suggests matching item rows, excludes totals and mismatched arithmetic', ocrLines.length === 2 && ocrLines[0].qty === 2 && ocrLines[1].rate === 1200.5 && !ocrLines[0].itemId && ocrLines[0].gstPercent === 0)
+  await repo.upsertItem({ ...item, mrp: 1000, discountPercent: 25, gstPercent: 18 })
   const posHost = document.createElement('div')
   document.body.appendChild(posHost)
   const posRoot = createRoot(posHost)
@@ -46,14 +47,45 @@ export async function runRegressions(check: Check) {
   posButton(item.name).click()
   await wait(30)
   check('POS: repeated product tap merges cart quantity', posHost.querySelector('[aria-label="Sale cart"]')?.textContent?.includes('2') === true)
+  const setPosInput = async (label: string, value: string) => {
+    const input = Array.from(posHost.querySelectorAll('input')).find(i => i.getAttribute('aria-label') === label)!
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')!.set!.call(input, value)
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await wait(30)
+  }
+  const discountLabel = `Discount percent for ${item.name}`
+  check('POS: catalogue default discount is visible and prefilled', posHost.textContent!.includes('Default discount 25%') && posHost.querySelector<HTMLInputElement>('[aria-label^="Discount percent for"]')?.value === '25')
+  await setPosInput(discountLabel, '')
+  check('POS: item discount can stay empty while replacing the value', posHost.querySelector<HTMLInputElement>('[aria-label^="Discount percent for"]')?.value === '')
+  await setPosInput(discountLabel, '0')
+  check('POS: zero removes inherited item discount', posHost.querySelector('[aria-label="Sale cart"]')?.textContent?.includes('₹2,360.00') === true)
+  await setPosInput(discountLabel, '120')
+  check('POS: item percentage is capped at 100', posHost.querySelector<HTMLInputElement>('[aria-label^="Discount percent for"]')?.value === '100')
+  await setPosInput(discountLabel, '-5')
+  check('POS: item percentage cannot be negative', posHost.querySelector<HTMLInputElement>('[aria-label^="Discount percent for"]')?.value === '0')
+  await setPosInput(discountLabel, '15')
+  await setPosInput('Bill discount value', '10')
+  check('POS: extra percent discount updates GST-inclusive total', posHost.querySelector('[aria-label="Sale cart"]')?.textContent?.includes('₹1,805.00') === true)
+  const discountType = posHost.querySelector<HTMLSelectElement>('[aria-label="Bill discount type"]')!
+  discountType.value = 'AMOUNT'
+  discountType.dispatchEvent(new window.Event('change', { bubbles: true }))
+  await wait(30)
+  check('POS: changing bill discount units resets previous numeric value', posHost.querySelector<HTMLInputElement>('[aria-label="Bill discount value"]')?.value === '0')
+  await setPosInput('Bill discount value', '')
+  check('POS: bill discount can stay empty while replacing the value', posHost.querySelector<HTMLInputElement>('[aria-label="Bill discount value"]')?.value === '')
+  await setPosInput('Bill discount value', '50')
+  check('POS: rupee discount updates GST-inclusive total', posHost.querySelector('[aria-label="Sale cart"]')?.textContent?.includes('₹1,947.00') === true)
   const checkout = posButton('Checkout & receipt')
   checkout.click(); checkout.click()
   await wait(120)
   const posInvoice = await db.invoices.get(posSaved[0])
   check('POS: checkout persists one paid invoice even after double click', posSaved.length === 1 && await db.invoices.count() === countBeforePOS + 1 && posInvoice?.items[0].qty === 2 && posInvoice.payments.length === 1 && posInvoice.payments[0].mode === 'CASH')
+  check('POS: checkout persists edited discounts and matching payment', posInvoice?.items[0].discountPercent === 15 && posInvoice.billDiscountType === 'AMOUNT' && posInvoice.billDiscountValue === 50 && posInvoice.payments[0].amount === 1947 && computeTotals(posInvoice).grandTotal === 1947)
+  check('POS: sale discount does not overwrite catalogue default', (await db.items.get(item.id!))?.discountPercent === 25)
   check('POS: checkout updates catalogue stock once', (await db.items.get(item.id!))?.stockQty === stockBeforePOS - 2)
   posRoot.unmount(); posHost.remove()
   await repo.deleteInvoice(posSaved[0])
+  await repo.upsertItem(item)
   const makeBill = async () => ({ ...await repo.newInvoice('TAX_INVOICE', '2026-09-01'), items: [lineFromItem(item, 2)] })
 
   // Two actual BillingScreen saves, with asynchronous number previews fully loaded.
