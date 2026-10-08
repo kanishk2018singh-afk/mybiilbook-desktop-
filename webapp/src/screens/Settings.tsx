@@ -1,7 +1,8 @@
+import { todayISO } from '../lib/format'
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, DEFAULT_TERMS, seedDatabase } from '../lib/db'
-import { exportBackup, importBackup, wipeAllData } from '../lib/repo'
+import { exportBackup, importBackup, wipeAllData, formatDocNumber } from '../lib/repo'
 import { download, readFileAsDataUrl, readFileAsText } from '../lib/format'
 import { runSelfTest, type SelfTestResult } from '../lib/selftest'
 import { ConfirmDialog, Segmented, Sheet, toast } from '../components/ui'
@@ -67,7 +68,7 @@ export function SettingsScreen({
     }
     const existing = (await db.business.toCollection().first())?.id
     const stateName = STATES.find((s) => s.code === form.stateCode)?.name ?? ''
-    const rec = { ...form, stateName }
+    const rec = { ...form, updatedAt: Date.now(), stateName }
     if (existing) await db.business.update(existing, rec)
     else await db.business.add(rec)
     setSavedTick(true)
@@ -86,7 +87,7 @@ export function SettingsScreen({
   }
 
   return (
-    <div className="flex-1 px-3 pb-24 pt-3">
+    <div className="screen-content form-page flex-1 px-3 pb-24 pt-3">
       {/* Shop profile */}
       <div className="card">
         <div className="text-[13px] font-bold text-slate-700">🏪 Dukaan / showroom ki details</div>
@@ -131,7 +132,7 @@ export function SettingsScreen({
             <label className="label">UPI ID (bill par QR aayega)</label>
             <input className="input" value={form.upiId ?? ''} onChange={(e) => setForm({ ...form, upiId: e.target.value })} placeholder="showroom@upi / 9876543210@ybl" />
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="field">
               <label className="label">Bank</label>
               <input className="input" value={form.bankName ?? ''} onChange={(e) => setForm({ ...form, bankName: e.target.value })} />
@@ -232,7 +233,7 @@ export function SettingsScreen({
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold text-slate-800">{d.label}</div>
                   <div className="truncate text-[11px] text-slate-500">
-                    {s ? `${s.prefix}${s.includeFy ? '/25-26' : ''}/${String(s.nextNumber).padStart(s.digits, '0')}` : '—'}
+                    {s ? formatDocNumber(s, todayISO(), s.nextNumber) : '—'}
                   </div>
                 </div>
                 <span className="text-slate-400">›</span>
@@ -245,7 +246,7 @@ export function SettingsScreen({
       {/* Data */}
       <div className="card mt-3">
         <div className="text-[13px] font-bold text-slate-700">💾 Data & backup</div>
-        <div className="mt-1 grid grid-cols-5 gap-1.5 text-center">
+        <div className="mt-1 grid grid-cols-3 gap-1.5 sm:grid-cols-5 text-center">
           <div className="rounded-xl bg-slate-50 py-2">
             <div className="num text-[13px] font-extrabold">{items}</div>
             <div className="text-[9px] font-bold uppercase text-slate-500">items</div>
@@ -396,7 +397,7 @@ export function SettingsScreen({
         })()}
       </Sheet>
 
-      <DocSettingSheet setting={docEdit} onClose={() => setDocEdit(null)} />
+      {docEdit ? <DocSettingSheet setting={docEdit} onClose={() => setDocEdit(null)} /> : null}
 
       <Sheet open={backupOpen} onClose={() => setBackupOpen(false)} title="Backup & restore" subtitle="JSON file me pura data">
         <div className="flex flex-col gap-2">
@@ -433,7 +434,7 @@ export function SettingsScreen({
             />
           </label>
           <p className="text-[11px] text-slate-500">
-            Restore se purana data merge hoga (same id wale records update ho jayenge). Safe rehne ke liye pehle backup
+            Restore mein same record update hoga aur naye records judenge; alag records overwrite nahi honge. Pehle backup
             le lein.
           </p>
         </div>
@@ -477,7 +478,7 @@ function DocSettingSheet({ setting, onClose }: { setting: DocSetting | null; onC
         <button
           className="btn btn-primary btn-block"
           onClick={async () => {
-            await db.docSettings.put(draft)
+            await db.docSettings.put({ ...draft, updatedAt: Date.now() })
             toast('Number series save ho gayi', 'success')
             onClose()
           }}
@@ -526,8 +527,7 @@ function DocSettingSheet({ setting, onClose }: { setting: DocSetting | null; onC
         <div className="rounded-xl bg-slate-50 p-3 text-[12px]">
           Agla bill number:{' '}
           <b>
-            {draft.prefix}
-            {draft.includeFy ? '/25-26' : ''}/{String(draft.nextNumber).padStart(draft.digits, '0')}
+            {formatDocNumber(draft, todayISO(), draft.nextNumber)}
           </b>
         </div>
         <div className="field">

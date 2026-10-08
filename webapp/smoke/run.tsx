@@ -378,7 +378,7 @@ async function main() {
   click(dom, printBtn)
   await wait(700)
   check('print: print dialog triggered', printCalls > 0, `${printCalls} call(s)`)
-  check('print: A4 page rule injected', (document.getElementById('print-page-rule')?.textContent ?? '').includes('A4') || true)
+  check('print: thermal page rule injected', (document.getElementById('print-page-rule')?.textContent ?? '').includes('80mm'))
 
   // receive payment flow
   const payBtn = [...rootEl.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Payment receive'))
@@ -508,7 +508,7 @@ async function main() {
 
   // ---------------- Login screen (UI) ----------------
   {
-    const { addUser, deleteUser, logout } = await import('../src/lib/auth')
+    const { addUser, logout } = await import('../src/lib/auth')
     const React = await import('react')
     const { createRoot } = await import('react-dom/client')
     const { LoginScreen } = await import('../src/screens/Auth')
@@ -526,6 +526,7 @@ async function main() {
     click(dom, userBtn)
     await wait(500)
     html = host.innerHTML
+    check('login UI: no unauthenticated PIN reset', !html.includes('Naya banayein'))
     check('login UI: PIN pad khul gaya', html.includes('PIN daalein') && !!host.querySelector('.pin-key'))
 
     for (const d of ['9', '9', '9', '9']) {
@@ -540,7 +541,7 @@ async function main() {
     logout()
     loginRoot.unmount()
     host.remove()
-    await deleteUser(uid)
+    await db.users.delete(uid)
     await wait(200)
   }
 
@@ -548,7 +549,7 @@ async function main() {
   {
     const { listCompanies, createCompany, activeCompany, setActiveCompany, deleteCompany, dbNameFor } =
       await import('../src/lib/company')
-    const { addUser, tryLogin, checkLogin, logout, setUserPin, deleteUser, activeUsers } =
+    const { addUser, tryLogin, checkLogin, logout, setUserPin, activeUsers } =
       await import('../src/lib/auth')
 
     const base = listCompanies()
@@ -579,11 +580,15 @@ async function main() {
     check('login: logout par session hat gaya', (await checkLogin()) === 'login')
 
     // owner ka PIN reset + cleanup
+    let resetDenied = false
+    try { await setUserPin(uid, '5555') } catch { resetDenied = true }
+    check('login: logged-out PIN reset denied', resetDenied)
+    await tryLogin(uid, '1234')
     await setUserPin(uid, '5555')
     const afterReset = await tryLogin(uid, '5555')
     check('login: PIN badalne ke baad naya PIN chalta hai', afterReset === true)
     logout()
-    await deleteUser(uid)
+    await db.users.delete(uid)
     check('users: user hatane par login band ho jata hai (app khulti hai)', (await checkLogin()) === 'off')
 
     deleteCompany(nayi.id)
@@ -595,6 +600,7 @@ async function main() {
   {
     const cloud = await import('../src/lib/cloud')
     const sync = await import('../src/lib/sync')
+    cloud.setAutoSync(false) // Keep manual-sync assertions independent of App's automatic effect.
     const { db } = await import('../src/lib/db')
 
     // ---- chhota mock Firebase: Identity Toolkit + Firestore ----
@@ -772,6 +778,13 @@ async function main() {
 
     check('sync: merge stats batate hain kitna juda', res2.added >= 3, `added=${res2.added} updated=${res2.updated}`)
 
+    const beforeAuto = fetchCalls.length
+    cloud.setAutoSync(true)
+    await wait(500)
+    check('sync: auto-sync starts without local PIN users after preference change', fetchCalls.length > beforeAuto)
+    cloud.setAutoSync(false)
+    await wait(100)
+
     // ---- 5) graceful: config ke bina ----
     cloud.logoutCloud()
     cloud.setCloudConfig(null)
@@ -788,6 +801,8 @@ async function main() {
   }
 
   root.unmount()
+  const { runRegressions } = await import('./regressions')
+  await runRegressions(check)
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`)

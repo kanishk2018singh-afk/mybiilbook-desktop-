@@ -150,10 +150,8 @@ chalta hai (app khulte hi + har 3 minute me), aur "Saari companies sync" se ek h
 
 **Sync kaise kaam karta hai**
 
-- Data `showroomUsers/{uid}/companies/{companyId}` document me JSON snapshot ke roop me jata hai.
-- Merge **natural key** par hota hai (item code, bill number, party naam, payment date+amount…): dono taraf same row
-  ho to **naya wala jeetta hai**, naya row ho to **jud jata hai**, aur id clash ho to naya id milta hai +
-  invoice/payment ke references (partyId, itemId) apne aap theek ho jate hain.
+- Chhota snapshot `showroomUsers/{uid}/companies/{companyId}` me jata hai. Bade snapshots immutable chunks me save hote hain; company document ka manifest tabhi update hota hai jab saare chunks upload ho jaate hain. Purane single-document backups bhi padhe ja sakte hain. Unchanged large snapshots reuse their content-addressed chunk paths; older generations are retained for concurrent readers.
+- Har record ki stable sync identity hoti hai. Legacy backups natural key se migrate hote hain; legacy invoices ke liye creation time bhi identity ka hissa hai. Same bill number wale alag documents preserve hote hain. Local ID clashes aur invoice/party/item links remap hote hain; backup merge bhi wahi safe remapping use karta hai; merge ek transaction me hota hai. Deletion markers deleted records ko stale snapshots se wapas aane se rokte hain.
 - Har company ka data alag — ek account me multiple firms, jaise MyBillBook me.
 - Offline-first: internet na ho to app waise hi chalti hai; sync baad me ho jata hai.
 - APK (WebView) me Google login Google ki policy se block hai — wahan **email/password** se login karein
@@ -166,7 +164,7 @@ Technical: `src/lib/cloud.ts` (Firebase Auth + Firestore REST, koi SDK nahi — 
 
 - Settings → **👤 Users & login** → naya user banayein (naam, role, 4-6 ank ka PIN).
 - **Jab tak koi user na bane, app bina login khulti hai** — user banate hi agla khulne par PIN maangta hai.
-- **Owner** PIN bhool jaye to login screen se naya PIN bana sakta hai; staff ko owner se naya PIN lena hoga.
+- Owner aur staff ka PIN sirf **logged-in owner** Settings se badal sakta hai. Login screen se PIN reset nahi hota. Pehla user hamesha owner hota hai; aakhri active owner ko disable/delete nahi kar sakte.
 - PIN ka hash phone me hi rehta hai (SHA-256). Login/session tab band hone par khatam.
 
 ### 🏢 Company / Firm (multi-company)
@@ -199,21 +197,20 @@ GitHub Actions workflow `.github/workflows/deploy-webapp.yml` — `main` branch 
 
 Poore billing flow ka automated test hai (jsdom + fake IndexedDB) — isi se data layer aur UI dono check hote hain.
 
-**Sirf ek command** (repo root se — packages khud install ho jayenge):
+Repo root se:
+
+```bash
+npm --prefix webapp run smoke
+```
+
+Ya `webapp` ke andar se:
 
 ```bash
 npm run smoke
+npm run verify     # TypeScript + smoke suite
 ```
 
-Ya `webapp` folder ke andar se:
-
-```bash
-cd webapp
-npm run smoke
-```
-
-Pehli baar chala rahe hain? Kuch aur nahi karna — script khud `npm install` kar leti hai (agar packages nahi mile)
-aur phir 79 checks chalati hai. Typecheck bhi saath chahiye to: `npm run verify`
+Preflight missing test packages install kar sakta hai. Deterministic setup ke liye `webapp/` me pehle `npm ci` chalayein. Har run ant me actual passed/total check count dikhata hai.
 
 ### ⚠️ Phir bhi nahi chala? Ye 3 cheezein check karein
 
@@ -221,21 +218,21 @@ aur phir 79 checks chalati hai. Typecheck bhi saath chahiye to: `npm run verify`
 | --- | --- | --- |
 | `npm: command not found` | Node.js install nahi hai | Node 22 install karein: https://nodejs.org (ya `winget install OpenJS.NodeJS` / `brew install node`) |
 | `npm ERR! network` / install fail | internet/proxy ya company firewall | mobile hotspot se try karein, ya `SMOKE_NO_INSTALL=1` ke saath manual `npm install` |
-| `Missing script: "smoke"` | aap purane commit/branch par hain (`main` branch me ye kaam abhi merge nahi hua) | `git fetch && git checkout arena/01a0fba1-showroom-manager1` — ya PR merge karke `main` pull karein |
+| `Missing script: "smoke"` | aap purane commit/branch par hain (`main` branch me ye kaam abhi merge nahi hua) | `git pull origin main` se latest code lein, phir `webapp/` me command chalayein |
 | `Node ... is not supported` | Node purana (20 se kam) | Node 22 install karein |
 
-**Terminal hi nahi chahiye?** App ke andar hi self-test hai: **Settings → 🧪 App self-test** (32 checks, browser me,
+**Terminal hi nahi chahiye?** App ke andar hi self-test hai: **Settings → 🧪 App self-test** (browser me,
 bill banake, payment lekar, purchase karke — aur ant me sab rollback).
 
 GitHub par har push ke saath ye test apne aap (clean environment me) chalta hai —
 workflow: `.github/workflows/webapp-test.yml` → tab **Actions → Web App Smoke Test** me result dikhta hai.
 
 ### 🧪 App ke andar wala self-test (bina terminal)
-**Settings → 🧪 App self-test** dabayein. Ye usi billing engine ko browser me chalata hai (32 checks:
+**Settings → 🧪 App self-test** dabayein. Ye usi billing engine ko browser me chalata hai (checks:
 GST maths, bill number series, stock kam/zyada, payment, khata balance, purchase payable, credit note,
 CSV, backup, expenses, aging) aur **ant me sab kuch rollback** kar deta hai — aapka asli data bilkul safe.
 
-Ye **72 checks** chalata hai: invoice maths (GST/CGST/SGST/IGST, bill discount, round off), number series,
+Suite ye workflows check karti hai: invoice maths (GST/CGST/SGST/IGST, bill discount, round off), number series,
 stock cut/restore, payment recording, khata balance, credit note, **purchase bill (stock IN + payable)**,
 **payments in/out register**, **expenses**, **udhaar aging**, CSV import/export, backup-restore,
 aur UI flow (home → items → reports → billing → item add → save → invoice view → print → UPI QR → payment →
@@ -254,3 +251,17 @@ src/
 ## 🗄️ Database versions
 - **v1** — business, items, parties, invoices, docSettings, appSettings
 - **v2** — payments (khata in/out), expenses (migrate apne aap hota hai, data safe rehta hai)
+
+### Regression coverage
+
+`smoke/regressions.ts` also verifies consecutive UI invoice numbering, cancellation/deletion stock effects, payment-date filtering, atomic replacement restore, sync ID collisions and links, deletion propagation, owner-only PIN changes, CSV delimiters, and chunked cloud snapshots including interrupted uploads. The Firebase checks use synthetic fetch mocks; real provider configuration and physical printers need deployment testing.
+
+Database **v4** adds deletion markers; existing company data is upgraded in place. Backups include markers. Reinstalling an older app version after this database upgrade is not supported.
+
+## POS, OCR and responsive layout
+
+Home / More → **POS** opens a searchable catalogue, barcode input, customer selection and cart. Checkout records a paid or customer-credit sale through the existing invoice/stock engine and opens the printable receipt. Use the detailed bill editor for discounts or partial payment.
+
+Home / More → **Scan bill (OCR)** reads printed JPG/PNG/WebP bills locally with Tesseract.js. English and Hindi are supported; downloading the OCR engine/language requires internet (including for the single HTML build). PDFs and handwriting are not supported. Text stays editable. Only rows shaped like `Name Qty Rate Amount` with matching arithmetic become suggestions; GST starts at zero and must be checked. OCR never saves a bill automatically. Suggestions have no inventory link: replace them with catalogue items in the draft to update stock. Retained OCR source text appears in bill notes; edit/remove it before printing as needed.
+
+Layouts adapt from 320px phones through tablets to 1440px desktops, support landscape, keep forms readable, and use a split catalogue/cart on large screens. Camera barcode support depends on the browser; manual entry and keyboard scanners remain available. A4 and thermal printing retain their original paper sizes.

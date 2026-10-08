@@ -61,7 +61,7 @@ export function ExpensesScreen({ business }: { business: Business }) {
   })
 
   return (
-    <div className="flex-1 px-3 pb-24 pt-3">
+    <div className="screen-content flex-1 px-3 pb-24 pt-3">
       <ChipRow>
         {(
           [
@@ -189,6 +189,7 @@ export function ExpensesScreen({ business }: { business: Business }) {
         </div>
       )}
 
+      {editing ? (
       <ExpenseEditor
         expense={editing}
         onClose={() => setEditing(null)}
@@ -197,6 +198,7 @@ export function ExpensesScreen({ business }: { business: Business }) {
           setToDelete(e)
         }}
       />
+      ) : null}
 
       <ConfirmDialog
         open={!!toDelete}

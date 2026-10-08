@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../lib/db'
 import { activeCompany, activeCompanyId, createCompany, listCompanies, switchCompany, renameCompany } from '../lib/company'
-import { setUserPin, tryLogin, type User } from '../lib/auth'
+import { tryLogin, type User } from '../lib/auth'
 import { Sheet, toast } from '../components/ui'
 
 const initials = (name: string) =>
@@ -61,7 +61,6 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [companySheet, setCompanySheet] = useState(false)
-  const [resetOpen, setResetOpen] = useState(false)
 
   const actives = (users ?? []).filter((u) => u.active && u.pinHash)
 
@@ -94,7 +93,7 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell auth-shell">
       <div className="mx-auto w-full max-w-[430px] px-5 pt-10 pb-8">
         <div className="text-center">
           <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-900 text-3xl text-white shadow-lg">
@@ -121,7 +120,6 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
                     setSelected(u)
                     setPin('')
                     setError('')
-                    setResetOpen(false)
                   }}
                 >
                   <span className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 text-[13px] font-bold text-indigo-800">
@@ -165,31 +163,12 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
               </button>
             </div>
 
-            {resetOpen ? (
-              <PinReset
-                user={selected}
-                onDone={async () => {
-                  setResetOpen(false)
-                  toast('Naya PIN set ho gaya — ab login karein', 'success')
-                }}
-                onCancel={() => setResetOpen(false)}
-              />
-            ) : (
-              <>
-                <PinPad pin={pin} length={selected.pinLength} onKey={press} onBack={() => setPin(pin.slice(0, -1))} />
-                {error ? <div className="mt-3 text-center text-[12px] font-semibold text-red-600">{error}</div> : null}
-                {busy ? <div className="mt-2 text-center text-[12px] text-slate-500">Check kar rahe hain…</div> : null}
-                <div className="mt-4 text-center">
-                  {selected.role === 'OWNER' ? (
-                    <button className="btn btn-ghost btn-sm" onClick={() => setResetOpen(true)}>
-                      PIN bhool gaye? Naya banayein
-                    </button>
-                  ) : (
-                    <div className="text-[11px] text-slate-500">PIN bhool gaye? Owner se naya PIN lein</div>
-                  )}
-                </div>
-              </>
-            )}
+            <PinPad pin={pin} length={selected.pinLength} onKey={press} onBack={() => setPin(pin.slice(0, -1))} />
+            {error ? <div className="mt-3 text-center text-[12px] font-semibold text-red-600">{error}</div> : null}
+            {busy ? <div className="mt-2 text-center text-[12px] text-slate-500">Check kar rahe hain…</div> : null}
+            <div className="mt-4 text-center text-[11px] text-slate-500">
+              PIN bhool gaye? Kisi logged-in owner se Settings mein naya PIN banwayein.
+            </div>
           </div>
         )}
 
@@ -199,59 +178,6 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
       </div>
 
       <CompanySheet open={companySheet} onClose={() => setCompanySheet(false)} />
-    </div>
-  )
-}
-
-/** Owner apna naya PIN set kare (login screen se) */
-function PinReset({ user, onDone, onCancel }: { user: User; onDone: () => void; onCancel: () => void }) {
-  const [step, setStep] = useState<'new' | 'confirm'>('new')
-  const [first, setFirst] = useState('')
-  const [pin, setPin] = useState('')
-  const [error, setError] = useState('')
-
-  const length = 4
-
-  const finish = async (value: string) => {
-    if (value !== first) {
-      setError('Dono PIN alag hain — dobara try karein')
-      setStep('new')
-      setFirst('')
-      setPin('')
-      return
-    }
-    if (!user.id) return
-    await setUserPin(user.id, value)
-    onDone()
-  }
-
-  const press = (d: string) => {
-    const next = (pin + d).slice(0, length)
-    setPin(next)
-    if (next.length === length) {
-      if (step === 'new') {
-        setFirst(next)
-        setPin('')
-        setStep('confirm')
-        setError('')
-      } else {
-        void finish(next)
-      }
-    }
-  }
-
-  return (
-    <div className="mt-3">
-      <div className="text-center text-[12px] font-semibold text-slate-700">
-        {step === 'new' ? 'Naya 4 ank ka PIN banayein' : 'Wahi PIN dobara daalein'}
-      </div>
-      <PinPad pin={pin} length={length} onKey={press} onBack={() => setPin(pin.slice(0, -1))} />
-      {error ? <div className="mt-3 text-center text-[12px] font-semibold text-red-600">{error}</div> : null}
-      <div className="mt-3 text-center">
-        <button className="btn btn-ghost btn-sm" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
     </div>
   )
 }

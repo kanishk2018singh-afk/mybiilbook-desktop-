@@ -1,3 +1,6 @@
+import { SYNC_TABLES as TABLE_ORDER, detachMissingReferences, normalizeTombstone, naturalKey, recordIdentity, tombstoneKey, type SyncTableName, type Tombstone } from './syncIdentity'
+export { naturalKey } from './syncIdentity'
+export type { SyncTableName } from './syncIdentity'
 /**
  * Cloud sync — company ka pura data cloud par (Firestore) aur wapas.
  *
@@ -51,131 +54,156 @@ export function lastSyncAt(companyId = activeCompanyId()): number {
 }
 
 const stamp = (row: Row): number => Number(row.updatedAt ?? row.createdAt ?? 0)
-const lower = (v: unknown): string => String(v ?? '').trim().toLowerCase()
 
-/** Row ki pehchaan — dono devices par ek hi row ka same key banta hai */
-export function naturalKey(table: string, row: Row): string {
-  switch (table) {
-    case 'items':
-      return `i:${lower(row.code) || lower(row.name)}`
-    case 'parties':
-      return `p:${lower(row.name)}|${lower(row.phone)}`
-    case 'invoices':
-      return `v:${lower(row.docType)}|${lower(row.number)}`
-    case 'payments':
-      return `y:${lower(row.date)}|${lower(row.direction)}|${Number(row.amount ?? 0)}|${lower(row.partyName)}`
-    case 'expenses':
-      return `e:${lower(row.date)}|${lower(row.category)}|${Number(row.amount ?? 0)}|${lower(row.paidTo)}`
-    case 'docSettings':
-      return `d:${lower(row.docType)}`
-    case 'appSettings':
-      return `s:${lower(row.key)}`
-    case 'business':
-      return 'b:business'
-    default:
-      return `x:${JSON.stringify(row).slice(0, 40)}`
-  }
-}
-
-const TABLE_ORDER = [
-  'business',
-  'docSettings',
-  'appSettings',
-  'parties',
-  'items',
-  'invoices',
-  'payments',
-  'expenses',
-] as const
-
-export type SyncTableName = (typeof TABLE_ORDER)[number]
 
 const tableOf = (dbx: ShowroomDB, name: SyncTableName): Table<Row, number | string> =>
   (dbx as unknown as Record<string, Table<Row, number | string>>)[name]
 
 /** Snapshot banao (Backup file wala hi format) */
 export async function buildSnapshot(dbx: ShowroomDB = db): Promise<string> {
-  const out: Record<string, unknown> = {
-    app: 'showroom-manager',
-    version: 2,
-    exportedAt: new Date().toISOString(),
-  }
-  for (const name of TABLE_ORDER) out[name] = await tableOf(dbx, name).toArray()
-  return JSON.stringify(out)
+  return dbx.transaction('r', [...TABLE_ORDER.map((name) => tableOf(dbx, name)), dbx.tombstones], async () => {
+    const out: Record<string, unknown> = { app: 'showroom-manager', version: 3 }
+    for (const name of TABLE_ORDER) out[name] = await tableOf(dbx, name).toArray()
+    out.tombstones = await dbx.tombstones.toArray()
+    detachMissingReferences(out)
+    return JSON.stringify(out)
+  })
 }
 
-/**
- * Remote snapshot ko local database me merge karo.
- * remaps: agar id clash ki wajah se naya id diya gaya, to usko yaad rakhte hain
- * taaki invoices/payments ke references theek ho jayein.
- */
+/** Merge atomically, allocating every local ID before resolving invoice links. */
 export async function mergeSnapshot(dbx: ShowroomDB, remoteJson: string): Promise<MergeStats> {
   const stats: MergeStats = { added: 0, updated: 0, skipped: 0 }
   const data = JSON.parse(remoteJson) as Record<string, unknown>
-
-  const partyRemap = new Map<number, number>()
-  const itemRemap = new Map<number, number>()
-
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid cloud snapshot')
   for (const name of TABLE_ORDER) {
-    const remoteRows = data[name]
-    if (!Array.isArray(remoteRows) || remoteRows.length === 0) continue
-    const table = tableOf(dbx, name)
-    const localRows = (await table.toArray()) as Row[]
-    const byKey = new Map<string, Row>()
-    const byId = new Map<number, Row>()
-    for (const r of localRows) {
-      byKey.set(naturalKey(name, r), r)
-      const id = Number(r.id)
-      if (Number.isFinite(id)) byId.set(id, r)
-    }
-
-    for (const raw of remoteRows as Row[]) {
-      const row: Row = { ...raw }
-      // reference remap (pehle merge hui tables se)
-      if (name === 'invoices' || name === 'payments') {
-        const pid = Number(row.partyId)
-        if (Number.isFinite(pid) && partyRemap.has(pid)) row.partyId = partyRemap.get(pid)
-        if (name === 'invoices') {
-          const from = Number(row.fromId)
-          if (Number.isFinite(from) && partyRemap.has(from)) row.fromId = partyRemap.get(from)
-          const items = Array.isArray(row.items) ? (row.items as Row[]) : []
-          for (const li of items) {
-            const iid = Number(li.itemId)
-            if (Number.isFinite(iid) && itemRemap.has(iid)) li.itemId = itemRemap.get(iid)
-          }
-        }
-      }
-
-      const key = naturalKey(name, row)
-      const existing = byKey.get(key)
-      if (existing) {
-        if (stamp(row) > stamp(existing)) {
-          await table.put({ ...row, id: existing.id })
-          stats.updated++
-        } else {
-          stats.skipped++
-        }
-        continue
-      }
-
-      const rid = Number(row.id)
-      const idTaken = Number.isFinite(rid) && byId.has(rid)
-      if (idTaken) {
-        // id clash — naya id lo aur reference note karo
-        const { id: _drop, ...rest } = row
-        const newId = (await table.add(rest as Row)) as number
-        if (name === 'parties') partyRemap.set(rid, Number(newId))
-        if (name === 'items') itemRemap.set(rid, Number(newId))
-        stats.added++
-      } else {
-        await table.put(row)
-        if (name === 'parties' && Number.isFinite(rid)) partyRemap.set(rid, rid)
-        if (name === 'items' && Number.isFinite(rid)) itemRemap.set(rid, rid)
-        stats.added++
-      }
+    if (!Array.isArray(data[name])) throw new Error(`Cloud snapshot missing table: ${name}`)
+  }
+  for (const name of [...TABLE_ORDER, 'tombstones']) {
+    const rows = data[name]
+    if (rows !== undefined && (!Array.isArray(rows) || rows.some((r) => !r || typeof r !== 'object' || Array.isArray(r)))) {
+      throw new Error(`Invalid cloud table: ${name}`)
     }
   }
-  return stats
+  return dbx.transaction('rw', [...TABLE_ORDER.map((name) => tableOf(dbx, name)), dbx.tombstones], async () => {
+    for (const raw of (data.tombstones ?? []) as Tombstone[]) {
+      const marker = normalizeTombstone(raw)
+      const current = await dbx.tombstones.get(marker.key)
+      if (!current || marker.deletedAt > current.deletedAt) await dbx.tombstones.put(marker)
+    }
+    const deleted = new Set((await dbx.tombstones.toArray()).map((t) => t.key))
+    const isDeleted = (name: SyncTableName, row: Row) => deleted.has(tombstoneKey(name, recordIdentity(name, row)))
+    // Historic documents can still reference a deleted master. Never reuse those local IDs.
+    const referencedIds = new Map<string, Set<number>>([['items', new Set()], ['parties', new Set()], ['invoices', new Set()]])
+    const reserve = (table: string, value: unknown) => {
+      const id = Number(value)
+      if (Number.isSafeInteger(id) && id > 0) referencedIds.get(table)?.add(id)
+    }
+    for (const invoice of await dbx.invoices.toArray()) {
+      reserve('parties', invoice.partyId)
+      reserve('invoices', invoice.fromId)
+      reserve('invoices', invoice.convertedToId)
+      for (const line of invoice.items) reserve('items', line.itemId)
+    }
+    for (const payment of await dbx.payments.toArray()) reserve('parties', payment.partyId)
+    const remaps = new Map<string, Map<number, number | undefined>>()
+    for (const name of TABLE_ORDER) {
+      const table = tableOf(dbx, name)
+      const numeric = name !== 'docSettings' && name !== 'appSettings'
+      const primary = (row: Row): number | string => numeric ? Number(row.id) : String(row[name === 'docSettings' ? 'docType' : 'key'])
+      const localRows: Row[] = []
+      const deletedIds: (number | string)[] = []
+      for (const row of await table.toArray()) {
+        if (isDeleted(name, row)) {
+          deletedIds.push(primary(row))
+          await table.delete(primary(row))
+          stats.updated++
+        } else localRows.push(row)
+      }
+      const remoteRows = (data[name] ?? []) as Row[]
+      const byIdentity = new Map(localRows.map((r) => [recordIdentity(name, r), r]))
+      const byNatural = new Map(localRows.map((r) => [naturalKey(name, r), r]))
+      const usedIds = new Set([...localRows.map(primary), ...deletedIds, ...(referencedIds.get(name) ?? [])])
+      const maxId = Math.max(0, ...[...usedIds].map((id) => Number(id) || 0), ...remoteRows.map((r) => Number(r.id) || 0))
+      let nextId = maxId + 1
+      const idMap = new Map<number, number | undefined>()
+      remaps.set(name, idMap)
+      const writes: Row[] = []
+      for (const raw of remoteRows) {
+        if (isDeleted(name, raw)) {
+          if (numeric) idMap.set(Number(raw.id), undefined) // Explicit deletion, not an unknown link.
+          stats.skipped++
+          continue
+        }
+        const row: Row = structuredClone(raw)
+        const identity = recordIdentity(name, row)
+        const candidate = byNatural.get(naturalKey(name, row))
+        // Legacy snapshots have no stable identity; retain natural-key matching for migration.
+        const legacy = (r: Row) => !r.syncId || String(r.syncId).startsWith('legacy:')
+        const existing = byIdentity.get(identity) ?? (candidate && (legacy(candidate) || legacy(row) || name === 'business' || !numeric) ? candidate : undefined)
+        if (existing) {
+          if (numeric) idMap.set(Number(raw.id), Number(existing.id))
+          // Counters must never move backwards, even if a legacy setting has no timestamp.
+          const nextNumber = name === 'docSettings' ? Math.max(Number(row.nextNumber) || 1, Number(existing.nextNumber) || 1) : undefined
+          if (stamp(row) > stamp(existing) || (nextNumber !== undefined && nextNumber !== existing.nextNumber)) {
+            const merged = stamp(row) > stamp(existing) ? row : { ...existing }
+            if (numeric) merged.id = existing.id
+            if (existing.syncId) merged.syncId = existing.syncId
+            if (nextNumber !== undefined) merged.nextNumber = nextNumber
+            writes.push(merged)
+            byIdentity.set(identity, merged)
+            byNatural.set(naturalKey(name, merged), merged)
+            stats.updated++
+          } else stats.skipped++
+          continue
+        }
+        if (numeric) {
+          const remoteId = Number(raw.id)
+          const id = Number.isSafeInteger(remoteId) && remoteId > 0 && !usedIds.has(remoteId) ? remoteId : nextId++
+          row.id = id
+          usedIds.add(id)
+          idMap.set(remoteId, id)
+          if (name !== 'business') row.syncId = identity
+        }
+        writes.push(row)
+        byIdentity.set(identity, row)
+        byNatural.set(naturalKey(name, row), row)
+        stats.added++
+      }
+      const mapReference = (row: Row, field: string, target: string) => {
+        if (row[field] == null) return
+        const map = remaps.get(target)
+        const remoteId = Number(row[field])
+        if (!map?.has(remoteId)) throw new Error(`Incomplete snapshot: missing ${target} reference ${remoteId}`)
+        // Only a mapped identity or an explicit deletion can change this reference.
+        row[field] = map.get(remoteId)
+      }
+      for (const row of writes) {
+        if (name === 'invoices' || name === 'payments') mapReference(row, 'partyId', 'parties')
+        if (name === 'invoices') {
+          mapReference(row, 'fromId', 'invoices')
+          mapReference(row, 'convertedToId', 'invoices')
+          for (const line of (row.items ?? []) as Row[]) mapReference(line, 'itemId', 'items')
+        }
+        await table.put(row)
+      }
+    }
+    // Persist detached historic links too, so later merges cannot bind them to a reused ID.
+    const surviving: Record<string, unknown> = {
+      items: await dbx.items.toArray(), parties: await dbx.parties.toArray(),
+      invoices: await dbx.invoices.toArray(), payments: await dbx.payments.toArray(),
+    }
+    const before = new Map(['invoices', 'payments'].map((name) => [name, new Map((surviving[name] as Row[]).map((row) => [row.id, JSON.stringify(row)]))]))
+    detachMissingReferences(surviving)
+    for (const name of ['invoices', 'payments'] as const) {
+      for (const row of surviving[name] as Row[]) {
+        if (before.get(name)?.get(row.id) !== JSON.stringify(row)) {
+          await tableOf(dbx, name).put({ ...row, updatedAt: Date.now() })
+          stats.updated++
+        }
+      }
+    }
+    return stats
+  })
 }
 
 /** Company registry (kaun-kaun si companies hain) ka merge */
@@ -213,7 +241,7 @@ export interface SyncProgress {
 }
 
 /** Saari companies ka sync (default: sirf active company) */
-export async function syncNow(
+async function runSync(
   opts: { all?: boolean; onProgress?: SyncProgress } = {},
 ): Promise<SyncResult> {
   if (!isCloudConfigured()) throw new Error('Cloud setup nahi hua — Settings → Cloud account me config daalein')
@@ -237,10 +265,9 @@ export async function syncNow(
     const dbx = dbFor(company.id)
     await dbx.open()
 
-    const last = lastSyncAt(company.id)
     const remote = await remoteGetCompany(session.uid, company.id)
 
-    if (remote && (remote.updatedAt > last || !last)) {
+    if (remote) {
       const stats = await mergeSnapshot(dbx, remote.payload)
       total.added += stats.added
       total.updated += stats.updated
@@ -261,6 +288,13 @@ export async function syncNow(
     pulled,
     at: Date.now(),
   }
+}
+
+let syncQueue: Promise<unknown> = Promise.resolve()
+export function syncNow(opts: { all?: boolean; onProgress?: SyncProgress } = {}): Promise<SyncResult> {
+  const next = syncQueue.then(() => runSync(opts))
+  syncQueue = next.catch(() => undefined)
+  return next
 }
 
 /** Login ke turant baad: registry + saari companies ka data neeche kheencho */

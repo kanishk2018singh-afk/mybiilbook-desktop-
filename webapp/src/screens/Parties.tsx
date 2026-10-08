@@ -60,7 +60,7 @@ export function PartiesScreen({ business, onOpenInvoice }: { business: Business;
   })
 
   return (
-    <div className="flex-1 px-3 pb-24 pt-3">
+    <div className="screen-content flex-1 px-3 pb-24 pt-3">
       <Segmented
         value={tab}
         onChange={(v) => setTab(v)}
@@ -162,6 +162,7 @@ export function PartiesScreen({ business, onOpenInvoice }: { business: Business;
         )}
       </div>
 
+      {editing ? (
       <PartyEditor
         party={editing}
         business={business}
@@ -171,6 +172,7 @@ export function PartiesScreen({ business, onOpenInvoice }: { business: Business;
           setToDelete(p)
         }}
       />
+      ) : null}
 
       <LedgerSheet
         party={ledger}

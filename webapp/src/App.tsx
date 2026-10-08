@@ -5,7 +5,7 @@ import { fmtDate, todayISO } from './lib/format'
 import type { Business, DocType, Invoice } from './lib/types'
 import { Toaster, toast } from './components/ui'
 import { checkLogin } from './lib/auth'
-import { autoSyncEnabled, isCloudConfigured, isSignedIn } from './lib/cloud'
+import { autoSyncEnabled, isCloudConfigured, isSignedIn, CLOUD_CHANGE_EVENT } from './lib/cloud'
 import { syncNow } from './lib/sync'
 import { LoginScreen } from './screens/Auth'
 import { BootProblem } from './components/BootProblem'
@@ -21,10 +21,14 @@ import { ExpensesScreen } from './screens/Expenses'
 import { MoreScreen, type MoreTarget } from './screens/More'
 import { BillingScreen } from './screens/Billing'
 import { InvoiceView } from './screens/InvoiceView'
+import { POSScreen } from './screens/POS'
+import { OCRScreen } from './screens/OCR'
 import { Onboarding } from './screens/Onboarding'
 
 type SubRoute =
   | { name: 'none' }
+  | { name: 'pos'; draft: Invoice }
+  | { name: 'ocr' }
   | { name: 'billing'; draft: Invoice }
   | { name: 'view'; id: number }
   | { name: 'parties' }
@@ -50,6 +54,13 @@ export default function App() {
   const [seeded, setSeeded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   // login gate: 'off' = koi user nahi, 'login' = PIN chahiye, 'ok' = andar
+  const [cloudRevision, setCloudRevision] = useState(0)
+  useEffect(() => {
+    const changed = () => setCloudRevision((n) => n + 1)
+    window.addEventListener(CLOUD_CHANGE_EVENT, changed)
+    window.addEventListener('storage', changed)
+    return () => { window.removeEventListener(CLOUD_CHANGE_EVENT, changed); window.removeEventListener('storage', changed) }
+  }, [])
   const [gate, setGate] = useState<'loading' | 'off' | 'login' | 'ok'>('loading')
 
   const refreshGate = useCallback(async () => {
@@ -82,10 +93,11 @@ export default function App() {
 
   // Cloud sync: app khulte hi + har 3 minute me (agar login hai aur auto-sync on hai)
   useEffect(() => {
-    if (gate !== 'ok') return
+    if (gate !== 'ok' && gate !== 'off') return
     if (!isCloudConfigured() || !isSignedIn() || !autoSyncEnabled()) return
     let alive = true
     const run = async () => {
+      if (!alive || !isSignedIn() || !autoSyncEnabled()) return
       try {
         const r = await syncNow()
         if (alive && r.added + r.updated > 0) {
@@ -101,7 +113,7 @@ export default function App() {
       alive = false
       clearInterval(t)
     }
-  }, [gate])
+  }, [gate, cloudRevision])
 
   useEffect(() => {
     const onPop = () => setRoute((r) => (r.name === 'none' ? r : { name: 'none' }))
@@ -134,6 +146,14 @@ export default function App() {
     openRoute({ name: 'billing', draft })
   }
 
+  const openPOS = async () => {
+    try {
+      const draft = await newInvoice('TAX_INVOICE')
+      draft.placeOfSupply = business?.stateCode ?? ''
+      openRoute({ name: 'pos', draft })
+    } catch (e) { toast(e instanceof Error ? e.message : 'POS nahi khula', 'error') }
+  }
+
   const install = async () => {
     if (!installEvt) return
     await installEvt.prompt()
@@ -141,7 +161,9 @@ export default function App() {
   }
 
   const handleMore = (target: MoreTarget) => {
-    if (target === 'parties') openRoute({ name: 'parties' })
+    if (target === 'pos') void openPOS()
+    else if (target === 'ocr') openRoute({ name: 'ocr' })
+    else if (target === 'parties') openRoute({ name: 'parties' })
     else if (target === 'payments') openRoute({ name: 'payments' })
     else if (target === 'expenses') openRoute({ name: 'expenses' })
     else if (target === 'settings') openRoute({ name: 'settings' })
@@ -194,6 +216,8 @@ export default function App() {
     )
   }
 
+  if (route.name === 'pos') return <div className="app-shell"><POSScreen draft={route.draft} business={business} onBack={() => setRoute({ name: 'none' })} onEdit={draft => setRoute({ name: 'billing', draft })} onSaved={id => { setRoute({ name: 'view', id }); setTab(1) }} /><Toaster /></div>
+
   if (route.name === 'billing') {
     return (
       <div className="app-shell">
@@ -231,6 +255,7 @@ export default function App() {
 
   if (route.name !== 'none') {
     const meta: Record<string, { title: string; subtitle: string }> = {
+      ocr: { title: 'OCR / Bill scanner', subtitle: 'Photo se editable purchase draft' },
       parties: { title: 'Khata / Parties', subtitle: 'Customer & supplier udhaar' },
       payments: { title: 'Payments In / Out', subtitle: 'Paisa aaya ya diya — pura register' },
       expenses: { title: 'Dukaan ka kharcha', subtitle: 'Kiraya, salary, bijli, transport' },
@@ -248,6 +273,7 @@ export default function App() {
             <div className="truncate text-[11px] text-brand-200">{info.subtitle}</div>
           </div>
         </div>
+        {route.name === 'ocr' ? <OCRScreen business={business} onDraft={draft => setRoute({ name: 'billing', draft })} /> : null}
         {route.name === 'parties' ? (
           <PartiesScreen business={business} onOpenInvoice={(id) => openRoute({ name: 'view', id })} />
         ) : null}
@@ -290,6 +316,7 @@ export default function App() {
         </button>
       </div>
 
+      {tab === 0 ? <div className="quick-tools"><button className="btn btn-primary" onClick={() => void openPOS()}>🛒 Open POS</button><button className="btn btn-outline" onClick={() => openRoute({ name: 'ocr' })}>📷 Scan bill (OCR)</button></div> : null}
       {tab === 0 ? (
         <HomeScreen
           business={business}
@@ -328,7 +355,7 @@ export default function App() {
 
       <nav className="tabbar no-print">
         {TABS.map((t, i) => (
-          <button key={t.label} className="tab-item" data-active={tab === i} onClick={() => setTab(i)}>
+          <button key={t.label} className="tab-item" aria-current={tab === i ? 'page' : undefined} data-active={tab === i} onClick={() => setTab(i)}>
             <span className="text-lg leading-none">{t.icon}</span>
             <span>{t.label}</span>
           </button>

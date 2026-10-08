@@ -75,6 +75,8 @@ export async function addUser(input: {
   pin: string
   phone?: string
 }): Promise<number> {
+  const first = (await db.users.count()) === 0
+  if (!first) await requireOwner()
   const name = input.name.trim()
   if (!name) throw new Error('Naam likhein')
   if (!/^\d{4,6}$/.test(input.pin)) throw new Error('PIN 4 se 6 ank ka hona chahiye')
@@ -82,7 +84,7 @@ export async function addUser(input: {
   return db.users.add({
     name,
     phone: input.phone?.trim() ?? '',
-    role: input.role,
+    role: first ? 'OWNER' : input.role,
     pinHash,
     pinLength: input.pin.length,
     active: true,
@@ -91,15 +93,20 @@ export async function addUser(input: {
 }
 
 export async function updateUser(id: number, patch: Partial<User>): Promise<void> {
+  await requireOwner()
+  await protectLastOwner(id, patch.active === false || (patch.role !== undefined && patch.role !== 'OWNER'))
   await db.users.update(id, patch)
 }
 
 export async function setUserPin(id: number, pin: string): Promise<void> {
+  await requireOwner()
   if (!/^\d{4,6}$/.test(pin)) throw new Error('PIN 4 se 6 ank ka hona chahiye')
   await db.users.update(id, { pinHash: await hashPin(pin), pinLength: pin.length })
 }
 
 export async function deleteUser(id: number): Promise<void> {
+  await requireOwner()
+  await protectLastOwner(id, true)
   await db.users.delete(id)
 }
 
@@ -132,6 +139,17 @@ export async function currentUser(): Promise<User | null> {
   if (id == null) return null
   const u = await db.users.get(id)
   return u && u.active ? u : null
+}
+
+async function requireOwner(): Promise<void> {
+  if ((await currentUser())?.role !== 'OWNER') throw new Error('Is kaam ke liye owner login chahiye')
+}
+
+async function protectLastOwner(id: number, removing: boolean): Promise<void> {
+  const user = await db.users.get(id)
+  if (removing && user?.active && user.role === 'OWNER' && await ownerCount() <= 1) {
+    throw new Error('Pehle doosra active owner banayein')
+  }
 }
 
 export type LoginGate = 'off' | 'login' | 'ok'

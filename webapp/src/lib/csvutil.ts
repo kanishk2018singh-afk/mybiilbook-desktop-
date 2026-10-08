@@ -40,7 +40,7 @@ export function parseCsvText(text: string): string[][] {
 
 export const csvEscape = (v: unknown): string => {
   const s = String(v ?? '')
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  return /[",;\t\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
 const toNum = (v: string | undefined, fallback = 0): number => {

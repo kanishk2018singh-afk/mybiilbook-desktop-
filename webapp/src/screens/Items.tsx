@@ -34,6 +34,7 @@ export function ItemsScreen({ business, focusLowStock }: { business: Business; f
   const [category, setCategory] = useState('ALL')
   const [lowOnly, setLowOnly] = useState(!!focusLowStock)
   const [editing, setEditing] = useState<Item | null>(null)
+  const [searchScannerOpen, setSearchScannerOpen] = useState(false)
   const [toDelete, setToDelete] = useState<Item | null>(null)
   const [csvOpen, setCsvOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -92,12 +93,12 @@ export function ItemsScreen({ business, focusLowStock }: { business: Business; f
   }
 
   return (
-    <div className="flex-1 px-3 pb-28 pt-3">
+    <div className="screen-content flex-1 px-3 pb-28 pt-3">
       <SearchInput
         value={q}
         onChange={setQ}
         placeholder="Item ka naam, code ya brand…"
-        onScan={() => setQ('')}
+        onScan={() => setSearchScannerOpen(true)}
       />
 
       <div className="mt-2 grid grid-cols-3 gap-2">
@@ -149,7 +150,7 @@ export function ItemsScreen({ business, focusLowStock }: { business: Business; f
             }
           />
         ) : null}
-        <div className="card-flat overflow-hidden">
+        <div className="item-grid card-flat overflow-hidden">
           {filtered.map((i) => {
             const sale = itemSalePrice(i.mrp, i.discountPercent, i.gstPercent)
             const margin = itemMargin(i.mrp, i.discountPercent, i.purchasePrice)
@@ -162,7 +163,7 @@ export function ItemsScreen({ business, focusLowStock }: { business: Business; f
                     {i.brand ? ` • ${i.brand}` : ''} • {i.category}
                     {i.hsn ? ` • HSN ${i.hsn}` : ''}
                   </div>
-                  <div className="mt-0.5 flex gap-2 text-[10px] font-bold">
+                  <div className="mt-0.5 flex flex-wrap gap-x-2 text-[10px] font-bold">
                     <span className="text-slate-500">MRP {money(i.mrp, 0)}</span>
                     <span className="text-slate-700">Sale {money(sale, 0)}</span>
                     <span className="text-warn">Margin {money(margin.amount, 0)} ({num(margin.percent, 0)}%)</span>
@@ -200,6 +201,9 @@ export function ItemsScreen({ business, focusLowStock }: { business: Business; f
         }}
       />
 
+      <BarcodeScanner open={searchScannerOpen} onClose={() => setSearchScannerOpen(false)} onDetect={(code) => { setQ(code); setSearchScannerOpen(false) }} />
+
+      {editing ? (
       <ItemEditor
         item={editing}
         business={business}
@@ -209,6 +213,7 @@ export function ItemsScreen({ business, focusLowStock }: { business: Business; f
           setToDelete(it)
         }}
       />
+      ) : null}
 
       <Sheet open={csvOpen} onClose={() => setCsvOpen(false)} title="CSV import / export" subtitle="Excel se items laayein ya bhejein">
         <div className="flex flex-col gap-2">
@@ -395,7 +400,7 @@ function ItemEditor({
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="field">
             <label className="label">Unit</label>
             <select className="select" value={draft.unit} onChange={(e) => setDraft({ ...draft, unit: e.target.value })}>

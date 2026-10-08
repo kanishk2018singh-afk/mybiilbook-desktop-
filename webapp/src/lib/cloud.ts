@@ -14,6 +14,10 @@ import { store } from './store'
 const CFG_KEY = 'showroom_cloud_config'
 const SESSION_KEY = 'showroom_cloud_session'
 const AUTO_KEY = 'showroom_cloud_autosync'
+export const CLOUD_CHANGE_EVENT = 'showroom-cloud-change'
+const notifyCloudChange = () => {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(CLOUD_CHANGE_EVENT))
+}
 
 export interface CloudConfig {
   apiKey: string
@@ -102,6 +106,7 @@ export function getCloudConfig(): CloudConfig | null {
 export function setCloudConfig(cfg: CloudConfig | null): void {
   if (!cfg) store.remove('local', CFG_KEY)
   else store.set('local', CFG_KEY, JSON.stringify(cfg))
+  notifyCloudChange()
 }
 
 export const isCloudConfigured = (): boolean => !!getCloudConfig()
@@ -140,8 +145,10 @@ export function getSession(): CloudSession | null {
 }
 
 function saveSession(s: CloudSession | null): void {
+  const previousUid = getSession()?.uid
   if (!s) store.remove('local', SESSION_KEY)
   else store.set('local', SESSION_KEY, JSON.stringify(s))
+  if (previousUid !== s?.uid) notifyCloudChange()
 }
 
 export const isSignedIn = (): boolean => !!getSession()
@@ -153,6 +160,7 @@ export function autoSyncEnabled(): boolean {
 }
 export function setAutoSync(on: boolean): void {
   store.set('local', AUTO_KEY, on ? 'yes' : 'no')
+  notifyCloudChange()
 }
 
 async function applyAuthResult(json: Record<string, unknown>, email: string): Promise<CloudSession> {
@@ -360,15 +368,51 @@ export async function remoteSetCompanies(uid: string, companies: RemoteCompany[]
 }
 
 export async function remoteGetCompany(uid: string, companyId: string): Promise<RemoteCompanyDoc | null> {
-  const doc = await fsGet(companyPath(uid, companyId))
-  if (!doc || typeof doc.payload !== 'string') return null
-  return {
-    payload: doc.payload,
-    updatedAt: Number(doc.updatedAt ?? 0),
-    updatedBy: String(doc.updatedBy ?? ''),
+  const path = companyPath(uid, companyId)
+  const doc = await fsGet(path)
+  if (!doc) return null
+  let payload: string
+  if (typeof doc.payload === 'string') payload = doc.payload // Existing single-document snapshots.
+  else {
+    const generation = doc.generation
+    const count = Number(doc.chunks)
+    if (typeof generation !== 'string' || !/^[a-zA-Z0-9-]+$/.test(generation) || !Number.isSafeInteger(count) || count < 1 || count > 10000) {
+      throw new CloudError('INVALID_SNAPSHOT', 'Cloud backup adhura hai; local data nahi badla gaya')
+    }
+    const parts: string[] = []
+    for (let i = 0; i < count; i++) {
+      const chunk = await fsGet(`${path}/snapshots/${generation}/chunks/${i}`)
+      if (typeof chunk?.payload !== 'string') throw new CloudError('MISSING_CHUNK', 'Cloud backup ka hissa nahi mila; dobara sync karein')
+      parts.push(chunk.payload)
+    }
+    payload = parts.join('')
   }
+  return { payload, updatedAt: Number(doc.updatedAt ?? 0), updatedBy: String(doc.updatedBy ?? '') }
 }
 
 export async function remoteSetCompany(uid: string, companyId: string, payload: string): Promise<void> {
-  await fsSet(companyPath(uid, companyId), { payload, updatedAt: Date.now(), updatedBy: uid })
+  const path = companyPath(uid, companyId)
+  // 100k UTF-16 units remain below 1 MiB even with worst-case JSON escaping.
+  const chunkSize = 100_000
+  if (payload.length <= chunkSize) {
+    await fsSet(path, { payload, updatedAt: Date.now(), updatedBy: uid })
+    return
+  }
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload))
+  const generation = Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, '0')).join('')
+  const parts: string[] = []
+  for (let start = 0; start < payload.length;) {
+    let end = Math.min(start + chunkSize, payload.length)
+    const last = payload.charCodeAt(end - 1)
+    const next = payload.charCodeAt(end)
+    if (last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) end--
+    parts.push(payload.slice(start, end))
+    start = end
+  }
+  const chunks = parts.length
+  for (let i = 0; i < chunks; i++) {
+    await fsSet(`${path}/snapshots/${generation}/chunks/${i}`, { payload: parts[i] })
+  }
+  // Publish only after every immutable chunk is written. A failed upload leaves the old manifest valid.
+  await fsSet(path, { generation, chunks, updatedAt: Date.now(), updatedBy: uid })
 }

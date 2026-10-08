@@ -145,7 +145,7 @@ export const PAYMENT_MODES: { key: PaymentMode; label: string; hi: string }[] = 
   { key: 'OTHER', label: 'Other', hi: 'अन्य' },
 ]
 
-export interface Business {
+export interface Business extends SyncRecord {
   id?: number
   name: string
   tagline?: string
@@ -165,7 +165,12 @@ export interface Business {
   terms: string
 }
 
-export interface Item {
+export interface SyncRecord {
+  syncId?: string
+  updatedAt?: number
+}
+
+export interface Item extends SyncRecord {
   id?: number
   name: string
   code: string
@@ -218,7 +223,7 @@ export interface ExtraCharge {
 
 export type PartyType = 'CUSTOMER' | 'SUPPLIER'
 
-export interface Party {
+export interface Party extends SyncRecord {
   id?: number
   type: PartyType
   name: string
@@ -231,7 +236,7 @@ export interface Party {
   createdAt: number
 }
 
-export interface Invoice {
+export interface Invoice extends SyncRecord {
   id?: number
   docType: DocType
   number: string
@@ -265,7 +270,7 @@ export interface Invoice {
   updatedAt: number
 }
 
-export interface DocSetting {
+export interface DocSetting extends SyncRecord {
   docType: DocType
   prefix: string
   /** include financial year in the number: INV/25-26/001 */
@@ -276,7 +281,7 @@ export interface DocSetting {
   enabled: boolean
 }
 
-export interface AppSetting {
+export interface AppSetting extends SyncRecord {
   key: string
   value: string
 }
@@ -368,7 +373,7 @@ export const GST_RATES = [0, 5, 12, 18, 28]
 export type PaymentDirection = 'IN' | 'OUT'
 
 /** Standalone party payment (advance / on-account / supplier payment) */
-export interface PartyPayment {
+export interface PartyPayment extends SyncRecord {
   id?: number
   date: string
   /** IN = paisa aaya (customer se), OUT = paisa diya (supplier ko) */
@@ -381,7 +386,7 @@ export interface PartyPayment {
   createdAt: number
 }
 
-export interface Expense {
+export interface Expense extends SyncRecord {
   id?: number
   date: string
   category: string

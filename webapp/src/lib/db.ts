@@ -1,3 +1,4 @@
+import { newSyncId, type Tombstone } from './syncIdentity'
 import Dexie, { type Table } from 'dexie'
 import type { User } from './auth'
 import type {
@@ -24,6 +25,7 @@ export class ShowroomDB extends Dexie {
   payments!: Table<PartyPayment, number>
   expenses!: Table<Expense, number>
   users!: Table<User, number>
+  tombstones!: Table<Tombstone, string>
 
   constructor(name: string = dbNameFor(activeCompanyId())) {
     // Har company ka apna database (firm switch = alag data)
@@ -46,6 +48,13 @@ export class ShowroomDB extends Dexie {
     this.version(3).stores({
       users: '++id, name, role, createdAt',
     })
+    this.version(4).stores({ tombstones: 'key, table, deletedAt' })
+    // Preserve supplied identities on restore/sync; assign new identities to new local records.
+    for (const name of ['items', 'parties', 'invoices', 'payments', 'expenses']) {
+      this.table(name).hook('creating', (_key, row) => {
+        if (!row.syncId) row.syncId = newSyncId()
+      })
+    }
   }
 }
 
@@ -135,7 +144,7 @@ export async function seedDatabase(): Promise<void> {
   await db.open()
   const company = activeCompany()
   const businessCount = await db.business.count()
-  if (businessCount === 0) await db.business.add({ ...DEFAULT_BUSINESS, name: company.name })
+  if (businessCount === 0) await db.business.add({ ...DEFAULT_BUSINESS, name: company.name, updatedAt: Date.now() })
 
   // make sure every document type has a number series (also adds newly introduced types)
   for (const def of DEFAULT_DOC_SETTINGS) {
@@ -145,7 +154,7 @@ export async function seedDatabase(): Promise<void> {
 
   // Sample items sirf pehli (default) company me — nayi company khaali shuru hoti hai
   const itemCount = await db.items.count()
-  if (itemCount === 0 && company.id === 'default') await db.items.bulkAdd(SAMPLE_ITEMS as Item[])
+  if (itemCount === 0 && company.id === 'default' && await db.tombstones.where('table').equals('items').count() === 0) await db.items.bulkAdd(SAMPLE_ITEMS as Item[])
 
   const defaults: AppSetting[] = [
     { key: 'onboarded', value: 'no' },
@@ -163,7 +172,7 @@ export async function seedDatabase(): Promise<void> {
 }
 
 export const getSetting = async (key: string): Promise<string> => (await db.appSettings.get(key))?.value ?? ''
-export const setSetting = (key: string, value: string) => db.appSettings.put({ key, value })
+export const setSetting = (key: string, value: string) => db.appSettings.put({ key, value, updatedAt: Date.now() })
 
 export const getBusiness = async (): Promise<Business> =>
   (await db.business.toCollection().first()) ?? { ...DEFAULT_BUSINESS }

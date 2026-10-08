@@ -53,7 +53,7 @@ body {
 
 /* ---------- App shell ---------- */
 .app-shell {
-  @apply mx-auto flex min-h-dvh w-full max-w-[520px] flex-col bg-slate-50 shadow-xl;
+  @apply mx-auto flex min-h-dvh w-full max-w-[1440px] flex-col bg-slate-50 shadow-xl;
 }
 
 .topbar {
@@ -177,7 +177,7 @@ body {
   @apply fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 backdrop-blur-[2px] sm:items-center;
 }
 .sheet {
-  @apply flex max-h-[92dvh] w-full max-w-[520px] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl;
+  @apply flex max-h-[92dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl;
 }
 .sheet-head {
   @apply flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3;
@@ -206,7 +206,7 @@ body {
   @apply border-b border-slate-100 py-2.5 last:border-0;
 }
 .qty-btn {
-  @apply grid h-8 w-8 place-items-center rounded-lg border border-slate-300 bg-white text-lg font-bold text-slate-700 active:bg-slate-100;
+  @apply grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-300 bg-white text-lg font-bold text-slate-700 active:bg-slate-100;
 }
 .sticky-total {
   @apply sticky bottom-0 z-20 border-t border-slate-200 bg-white/98 px-3.5 py-3 backdrop-blur;
@@ -305,4 +305,54 @@ body {
   background: #fef3c7;
   color: #b45309;
   font-weight: 700;
+}
+
+/* ---------- Responsive workspace (print paper keeps its own sizing) ---------- */
+.app-shell > *, .screen-content, .card, .card-flat, .field, .stat-box { min-width: 0; }
+.screen-content { width: 100%; padding: 1rem 0.75rem 2rem; }
+.quick-tools { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 1rem 0.75rem 0; }
+.quick-tools > * { flex: 1; }
+.auth-shell { max-width: 520px; }
+.input, .select, .textarea { min-width: 0; max-width: 100%; }
+.btn, .chip, .tab-item { min-height: 44px; }
+button, a, input, select, textarea { touch-action: manipulation; }
+button:focus-visible, a:focus-visible { outline: 3px solid #818cf8; outline-offset: 2px; }
+.stat-box .num { overflow-wrap: anywhere; }
+.tabbar { margin-top: auto; }
+.topbar .btn { flex-shrink: 0; }
+.sheet-body { min-height: 0; overscroll-behavior: contain; }
+.toast { overflow-wrap: anywhere; }
+.pos-layout { display: grid; gap: 1.25rem; align-items: start; }
+.billing-line-layout { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; align-items: center; }
+.billing-line-layout > button { grid-column: 1 / -1; }
+.billing-line-layout > .num { width: auto; }
+@media (max-width: 639px) {
+  .input, .select, .textarea { font-size: 16px; } /* Prevent iOS focus zoom. */
+  .overlay { padding-top: env(safe-area-inset-top); }
+  .sheet { max-height: 95dvh; }
+}
+@media (min-width: 640px) {
+  .screen-content { padding: 1.5rem 1.5rem 2rem; }
+  .quick-tools { padding: 1.25rem 1.5rem 0; }
+  .quick-tools > * { flex: initial; }
+  .topbar { padding-left: 1.5rem; padding-right: 1.5rem; }
+  .tab-item { flex-direction: row; justify-content: center; gap: 0.5rem; font-size: 13px; padding: 1rem; }
+  .overlay { padding: 1.5rem; }
+  .billing-line-layout { grid-template-columns: minmax(0, 1fr) auto minmax(80px, auto); }
+  .billing-line-layout > button { grid-column: auto; }
+  .item-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .item-grid .list-row { border: 1px solid #f1f5f9; }
+}
+@media (min-width: 1024px) {
+  .screen-content { padding: 1.75rem 2rem 2.5rem; }
+  .quick-tools { padding: 1.5rem 2rem 0; }
+  .topbar { padding: 1rem 2rem; }
+  .topbar .text-sm { font-size: 1rem; }
+  .form-page, .invoice-content { max-width: 1000px; margin-inline: auto; }
+  .billing-content { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1rem; align-content: start; align-items: start; }
+  .billing-content > .mt-3 { margin-top: 0; }
+  .billing-items { grid-column: 1; grid-row: 2 / span 4; }
+  .pos-cart-jump { display: none; }
+  .pos-layout { grid-template-columns: minmax(0, 1fr) minmax(340px, 390px); }
+  .pos-cart { position: sticky; top: 6rem; max-height: calc(100dvh - 7rem); overflow-y: auto; }
 }

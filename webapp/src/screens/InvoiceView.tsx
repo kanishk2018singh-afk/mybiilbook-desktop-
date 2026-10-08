@@ -117,7 +117,7 @@ export function InvoiceView({
         </button>
       </div>
 
-      <div className="no-print flex-1 px-3 pt-3">
+      <div className="screen-content invoice-content no-print flex-1 px-3 pt-3">
         {/* Status summary */}
         <div className="card">
           <div className="flex items-start justify-between gap-2">

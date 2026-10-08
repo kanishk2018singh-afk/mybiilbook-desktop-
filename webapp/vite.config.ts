@@ -34,7 +34,7 @@ export default defineConfig({
         start_url: './',
         scope: './',
         display: 'standalone',
-        orientation: 'portrait',
+        orientation: 'any',
         theme_color: '#312e81',
         background_color: '#f8fafc',
         categories: ['business', 'finance', 'productivity'],

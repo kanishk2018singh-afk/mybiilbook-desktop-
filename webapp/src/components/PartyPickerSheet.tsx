@@ -134,7 +134,7 @@ export function PartyPickerSheet({
             <SearchInput value={q} onChange={setQ} placeholder="Party ka naam ya mobile…" />
             <div className="mt-2 flex gap-2">
               {allowCash ? (
-                <button className="btn btn-outline btn-sm flex-1" onClick={() => onPick(null)}>
+                <button className="btn btn-outline btn-sm flex-1" onClick={() => { onPick(null); onClose() }}>
                   🧍 Cash Sale (bina party)
                 </button>
               ) : null}

@@ -6,7 +6,7 @@ import type { Business, DocType, Invoice } from '../lib/types'
 import { DOC_TYPES, docMeta } from '../lib/types'
 import { toast } from '../components/ui'
 
-export type MoreTarget = 'billing' | 'parties' | 'payments' | 'expenses' | 'reports' | 'settings'
+export type MoreTarget = 'pos' | 'ocr' | 'billing' | 'parties' | 'payments' | 'expenses' | 'reports' | 'settings'
 
 export function MoreScreen({
   business,
@@ -63,6 +63,8 @@ export function MoreScreen({
     .slice(0, 5)
 
   const tiles: { key: MoreTarget; icon: string; label: string; hi: string; badge?: string }[] = [
+    { key: 'pos', icon: '🛒', label: 'POS / Quick sale', hi: 'Fast checkout & receipt' },
+    { key: 'ocr', icon: '📷', label: 'OCR / Bill scanner', hi: 'Photo → purchase draft' },
     { key: 'parties', icon: '👥', label: 'Khata / Parties', hi: 'Customer & supplier udhaar', badge: money(stats.receivable, 0) },
     { key: 'payments', icon: '💸', label: 'Payments In/Out', hi: 'Paisa aaya / diya' },
     { key: 'expenses', icon: '🧾', label: 'Expenses', hi: 'Kiraya, salary, bijli' },
@@ -71,8 +73,8 @@ export function MoreScreen({
   ]
 
   return (
-    <div className="flex-1 px-3 pb-28 pt-3">
-      <div className="grid grid-cols-2 gap-2">
+    <div className="screen-content flex-1 px-3 pb-28 pt-3">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <div className="card text-[12px]">
           <div className="text-[10px] font-bold uppercase text-slate-500">Lena hai (receivable)</div>
           <div className="num text-lg font-extrabold text-due">{money(stats.receivable, 0)}</div>
@@ -102,7 +104,7 @@ export function MoreScreen({
       <div className="section-title mt-4">
         <span>Naya document banayein</span>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
         {DOC_TYPES.map((d) => (
           <button
             key={d.key}

@@ -187,7 +187,7 @@ export function BillingScreen({
           : inv.payments
       const toSave: Invoice = {
         ...inv,
-        number: inv.number || numberPreview,
+        number: inv.number.trim(),
         payments,
       }
       const id = await saveInvoice(toSave, business.stateCode)
@@ -203,7 +203,7 @@ export function BillingScreen({
       onSaved(id)
     } catch (e) {
       console.error(e)
-      toast('Save nahi hua — dobara koshish karein', 'error')
+      toast(e instanceof Error && e.message.trim() ? e.message : 'Save nahi hua — dobara koshish karein', 'error')
     } finally {
       setSaving(false)
     }
@@ -230,7 +230,7 @@ export function BillingScreen({
         </button>
       </div>
 
-      <div className="flex-1 px-3 pb-40">
+      <div className="screen-content billing-content flex-1 px-3 pb-40">
         {/* Doc type + date */}
         <div className="mt-3 card">
           <ChipRow>
@@ -289,7 +289,7 @@ export function BillingScreen({
         </button>
 
         {/* Items */}
-        <div className="mt-3 card">
+        <div className="mt-3 card billing-items">
           <div className="flex items-center justify-between">
             <div className="text-[13px] font-bold text-slate-700">Items ({inv.items.length})</div>
             <div className="flex gap-1.5">
@@ -312,7 +312,7 @@ export function BillingScreen({
               const lt = t.lines[i]
               return (
                 <div key={l.id} className="cart-line">
-                  <div className="flex items-start gap-2">
+                  <div className="billing-line-layout">
                     <button className="min-w-0 flex-1 text-left" onClick={() => setEditLine(l)}>
                       <div className="truncate text-[13px] font-semibold text-slate-900">{l.name}</div>
                       <div className="truncate text-[11px] text-slate-500">
@@ -671,65 +671,7 @@ export function BillingScreen({
         </PrintPortal>
       ) : null}
 
-      <Sheet
-        open={moreOpen}
-        onClose={() => setMoreOpen(false)}
-        title="Bill options"
-        subtitle={inv.number || numberPreview}
-      >
-        <div className="flex flex-col gap-2">
-          <button
-            className="btn btn-outline btn-block"
-            onClick={() => {
-              setMoreOpen(false)
-              void doSave('view')
-            }}
-          >
-            💾 Save karein
-          </button>
-          <button
-            className="btn btn-outline btn-block"
-            onClick={() => {
-              setMoreOpen(false)
-              void doSave('share')
-            }}
-          >
-            💬 Save + WhatsApp share
-          </button>
-          <button
-            className="btn btn-outline btn-block"
-            onClick={() => {
-              setMoreOpen(false)
-              setPreviewMode('a4')
-            }}
-          >
-            👁 Bill ka preview dekhein
-          </button>
-          <button
-            className="btn btn-danger-soft btn-block"
-            onClick={() => {
-              setInv({
-                ...inv,
-                items: [],
-                billDiscountValue: 0,
-                extraCharges: [],
-                payments: [],
-                partyId: undefined,
-                partyName: '',
-                partyPhone: '',
-                partyGstin: '',
-                partyAddress: '',
-                notes: '',
-              })
-              setPaidInput('')
-              setMoreOpen(false)
-              toast('Bill khaali kar diya')
-            }}
-          >
-            🗑 Items hataakar naya bill shuru karein
-          </button>
-        </div>
-      </Sheet>
+
     </div>
   )
 }

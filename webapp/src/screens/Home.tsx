@@ -63,7 +63,7 @@ export function HomeScreen({
         if (inv.date >= month.from && inv.date <= month.to) purchaseMonth += t.grandTotal
         payable += t.due
       } else if (meta.negative) {
-        monthSale -= t.grandTotal
+        if (inv.date >= month.from && inv.date <= month.to) monthSale -= t.grandTotal
         receivable -= t.due
       }
       if (inv.date === today) {
@@ -112,7 +112,7 @@ export function HomeScreen({
   ]
 
   return (
-    <div className="flex-1 px-3 pb-28 pt-3">
+    <div className="screen-content flex-1 px-3 pb-28 pt-3">
       <div className="rounded-2xl bg-gradient-to-br from-brand-700 to-brand-900 p-4 text-white shadow-lg">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-brand-200">Aaj ki sale</div>
         <div className="num mt-0.5 text-3xl font-extrabold">{money(stats.todaySale)}</div>
@@ -129,7 +129,7 @@ export function HomeScreen({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <StatBox label="Is mahine ki sale" value={money(stats.monthSale)} tone="money" sub={`7 din: ${money(stats.weekSale)}`} onClick={onGoReports} />
         <StatBox label="Udhaar (lena hai)" value={money(stats.receivable)} tone="due" icon="⏳" onClick={onGoParties} />
         <StatBox
@@ -194,7 +194,7 @@ export function HomeScreen({
       <div className="section-title mt-4">
         <span>Naya bill / document</span>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {quick.map((d) => (
           <button
             key={d.key}

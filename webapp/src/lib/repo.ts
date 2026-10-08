@@ -1,3 +1,6 @@
+import { mergeSnapshot } from './sync'
+import type { Table } from 'dexie'
+import { SYNC_TABLES, detachMissingReferences, normalizeTombstone, newSyncId, recordIdentity, tombstoneKey, type SyncTableName, type SyncRow } from './syncIdentity'
 import { db, DEFAULT_TERMS, getBusiness, getDocSetting, setSetting } from './db'
 import { computeTotals } from './calc'
 import { daysBetween, financialYear, round2, todayISO, uid } from './format'
@@ -33,8 +36,12 @@ export async function peekNumber(docType: DocType, date: string): Promise<string
 async function allocateNumber(docType: DocType, date: string): Promise<string> {
   const s = await db.docSettings.get(docType)
   const setting: DocSetting = s ?? (await getDocSetting(docType))
-  const number = formatDocNumber(setting, date, setting.nextNumber)
-  await db.docSettings.put({ ...setting, nextNumber: setting.nextNumber + 1 })
+  let nextNumber = setting.nextNumber
+  let number = formatDocNumber(setting, date, nextNumber)
+  while (await db.invoices.where('number').equals(number).filter((inv) => inv.docType === docType).count()) {
+    number = formatDocNumber(setting, date, ++nextNumber)
+  }
+  await db.docSettings.put({ ...setting, nextNumber: nextNumber + 1, updatedAt: Date.now() })
   return number
 }
 
@@ -43,7 +50,8 @@ async function allocateNumber(docType: DocType, date: string): Promise<string> {
 export const listItems = () => db.items.orderBy('name').toArray()
 
 export async function upsertItem(item: Item): Promise<number> {
-  const rec = { ...item, updatedAt: Date.now() }
+  const previous = item.id ? await db.items.get(item.id) : undefined
+  const rec = { ...item, syncId: previous?.syncId ?? item.syncId, updatedAt: Date.now() }
   if (rec.id) {
     await db.items.put(rec)
     return rec.id
@@ -53,9 +61,7 @@ export async function upsertItem(item: Item): Promise<number> {
   return db.items.add(rest as Item)
 }
 
-export async function deleteItem(id: number): Promise<void> {
-  await db.items.delete(id)
-}
+export const deleteItem = (id: number): Promise<void> => deleteRecord('items', id)
 
 export async function adjustStock(itemId: number, delta: number): Promise<void> {
   await db.transaction('rw', db.items, async () => {
@@ -82,6 +88,8 @@ export async function findItemByCode(code: string): Promise<Item | undefined> {
 export const listParties = () => db.parties.orderBy('name').toArray()
 
 export async function upsertParty(p: Party): Promise<number> {
+  const previous = p.id ? await db.parties.get(p.id) : undefined
+  p = { ...p, syncId: previous?.syncId ?? p.syncId, updatedAt: Date.now() }
   if (p.id) {
     await db.parties.put(p)
     return p.id
@@ -91,9 +99,7 @@ export async function upsertParty(p: Party): Promise<number> {
   return db.parties.add(rest as Party)
 }
 
-export async function deleteParty(id: number): Promise<void> {
-  await db.parties.delete(id)
-}
+export const deleteParty = (id: number): Promise<void> => deleteRecord('parties', id)
 
 /** All invoices (final) of a party + outstanding balance */
 export async function partyInvoices(partyId: number): Promise<Invoice[]> {
@@ -151,6 +157,7 @@ export async function allBalances(shopState = '08'): Promise<Map<number, number>
 // ---------------- Invoices ----------------
 
 async function applyStockEffect(inv: Invoice, direction: 1 | -1): Promise<void> {
+  if (inv.status !== 'FINAL') return
   const meta = docMeta(inv.docType)
   if (!meta.stockOut && !meta.stockIn) return
   const sign = (meta.stockOut ? -1 : 1) * direction
@@ -159,7 +166,7 @@ async function applyStockEffect(inv: Invoice, direction: 1 | -1): Promise<void> 
     const item = await db.items.get(line.itemId)
     if (!item?.id) continue
     await db.items.update(item.id, {
-      stockQty: Math.max(0, (item.stockQty || 0) + sign * line.qty),
+      stockQty: (item.stockQty || 0) + sign * line.qty,
       updatedAt: Date.now(),
     })
   }
@@ -174,8 +181,13 @@ export async function saveInvoice(inv: Invoice, shopState = '08'): Promise<numbe
     if (existing) await applyStockEffect(existing, -1)
 
     const number = inv.number?.trim() ? inv.number.trim() : await allocateNumber(inv.docType, inv.date)
+    if (!existing || existing.number !== number || existing.docType !== inv.docType) {
+      const duplicate = await db.invoices.where('number').equals(number).filter((other) => other.docType === inv.docType && other.id !== id).first()
+      if (duplicate) throw new Error('Ye bill number pehle se hai; doosra number likhein')
+    }
     const rec: Invoice = {
       ...inv,
+      syncId: existing?.syncId ?? inv.syncId,
       number,
       status: inv.status ?? 'FINAL',
       createdAt: existing?.createdAt ?? inv.createdAt ?? now,
@@ -202,10 +214,10 @@ export async function saveInvoice(inv: Invoice, shopState = '08'): Promise<numbe
 }
 
 export async function deleteInvoice(id: number): Promise<void> {
-  await db.transaction('rw', db.invoices, db.items, async () => {
+  await db.transaction('rw', db.invoices, db.items, db.tombstones, async () => {
     const inv = await db.invoices.get(id)
     if (inv) await applyStockEffect(inv, -1)
-    await db.invoices.delete(id)
+    await deleteRecord('invoices', id)
   })
 }
 
@@ -222,7 +234,7 @@ export async function restoreInvoice(id: number): Promise<void> {
   await db.transaction('rw', db.invoices, db.items, async () => {
     const inv = await db.invoices.get(id)
     if (!inv?.id) return
-    if (inv.status !== 'FINAL') await applyStockEffect(inv, 1)
+    if (inv.status !== 'FINAL') await applyStockEffect({ ...inv, status: 'FINAL' }, 1)
     await db.invoices.update(id, { status: 'FINAL', updatedAt: Date.now() })
   })
 }
@@ -334,7 +346,7 @@ export async function addPayment(p: Omit<PartyPayment, 'id'>): Promise<number> {
   return db.payments.add(rest as PartyPayment)
 }
 
-export const deletePayment = (id: number): Promise<void> => db.payments.delete(id)
+export const deletePayment = (id: number): Promise<void> => deleteRecord('payments', id)
 
 export interface PaymentRow {
   key: string
@@ -354,7 +366,7 @@ export interface PaymentRow {
 /** Everything that moved money: bill-wise payments + standalone khata payments */
 export async function paymentRegister(from: string, to: string): Promise<PaymentRow[]> {
   const [invoices, payments] = await Promise.all([
-    db.invoices.where('date').between(from, to, true, true).toArray(),
+    db.invoices.toArray(),
     db.payments.where('date').between(from, to, true, true).toArray(),
   ])
   const rows: PaymentRow[] = []
@@ -362,6 +374,8 @@ export async function paymentRegister(from: string, to: string): Promise<Payment
     const meta = docMeta(inv.docType)
     const direction: PaymentDirection = meta.isPurchase || meta.negative ? 'OUT' : 'IN'
     ;(inv.payments ?? []).forEach((p) => {
+      const date = p.date || inv.date
+      if (date < from || date > to) return
       rows.push({
         key: `bill-${inv.id}-${p.id}`,
         date: p.date || inv.date,
@@ -401,6 +415,8 @@ export async function paymentRegister(from: string, to: string): Promise<Payment
 export const listExpenses = (): Promise<Expense[]> => db.expenses.orderBy('date').reverse().toArray()
 
 export async function upsertExpense(e: Expense): Promise<number> {
+  const previous = e.id ? await db.expenses.get(e.id) : undefined
+  e = { ...e, syncId: previous?.syncId ?? e.syncId, updatedAt: Date.now() }
   if (e.id) {
     await db.expenses.put(e)
     return e.id
@@ -410,7 +426,7 @@ export async function upsertExpense(e: Expense): Promise<number> {
   return db.expenses.add(rest as Expense)
 }
 
-export const deleteExpense = (id: number): Promise<void> => db.expenses.delete(id)
+export const deleteExpense = (id: number): Promise<void> => deleteRecord('expenses', id)
 
 export const expensesBetween = (from: string, to: string): Promise<Expense[]> =>
   db.expenses.where('date').between(from, to, true, true).toArray()
@@ -539,91 +555,99 @@ export async function applyPurchaseRates(inv: Invoice): Promise<number> {
 
 // ---------------- Backup ----------------
 
+const syncTable = (name: SyncTableName): Table<SyncRow, number | string> => db.table(name)
+
+async function markDeleted(name: SyncTableName, row: SyncRow): Promise<void> {
+  if (name === 'business' || name === 'docSettings' || name === 'appSettings') return
+  const identity = recordIdentity(name, row)
+  await db.tombstones.put({ key: tombstoneKey(name, identity), table: name, identity, deletedAt: Date.now() })
+}
+
+async function deleteRecord(name: SyncTableName, id: number): Promise<void> {
+  const table = syncTable(name)
+  await db.transaction('rw', table, db.tombstones, async () => {
+    const row = await table.get(id)
+    if (row) await markDeleted(name, row)
+    await table.delete(id)
+  })
+}
+
 export async function exportBackup(): Promise<string> {
-  const [business, items, parties, invoices, docSettings, appSettings, payments, expenses] = await Promise.all([
-    db.business.toArray(),
-    db.items.toArray(),
-    db.parties.toArray(),
-    db.invoices.toArray(),
-    db.docSettings.toArray(),
-    db.appSettings.toArray(),
-    db.payments.toArray(),
-    db.expenses.toArray(),
-  ])
-  return JSON.stringify(
-    {
-      app: 'showroom-manager',
-      version: 2,
-      exportedAt: new Date().toISOString(),
-      business,
-      items,
-      parties,
-      invoices,
-      docSettings,
-      appSettings,
-      payments,
-      expenses,
-    },
-    null,
-    2,
-  )
+  return db.transaction('r', [...SYNC_TABLES.map(syncTable), db.tombstones], async () => {
+    const data: Record<string, unknown> = { app: 'showroom-manager', version: 3, exportedAt: new Date().toISOString() }
+    for (const name of SYNC_TABLES) data[name] = await syncTable(name).toArray()
+    data.tombstones = await db.tombstones.toArray()
+    detachMissingReferences(data)
+    return JSON.stringify(data, null, 2)
+  })
 }
 
 export async function importBackup(json: string, mode: 'replace' | 'merge' = 'merge'): Promise<void> {
   const data = JSON.parse(json)
-  if (Array.isArray(data.business) && data.business.length) {
-    if (mode === 'replace') await db.business.clear()
-    const existing = await db.business.count()
-    if (existing === 0) await db.business.bulkAdd(data.business)
+  if (!data || data.app !== 'showroom-manager' || !Array.isArray(data.items) || !Array.isArray(data.invoices)) {
+    throw new Error('Invalid showroom backup')
   }
-  await db.transaction(
-    'rw',
-    db.items,
-    db.parties,
-    db.invoices,
-    db.docSettings,
-    db.appSettings,
-    async () => {
-      if (mode === 'replace') {
-        await Promise.all([
-          db.items.clear(),
-          db.parties.clear(),
-          db.invoices.clear(),
-          db.docSettings.clear(),
-          db.appSettings.clear(),
-          db.payments.clear(),
-          db.expenses.clear(),
-        ])
-      }
-      for (const table of ['items', 'parties', 'invoices', 'docSettings', 'appSettings'] as const) {
-        const rows = data[table]
-        if (!Array.isArray(rows)) continue
-        for (const row of rows) {
-          if (table === 'items') await db.items.put(row)
-          else if (table === 'parties') await db.parties.put(row)
-          else if (table === 'invoices') await db.invoices.put(row)
-          else if (table === 'docSettings') await db.docSettings.put(row)
-          else await db.appSettings.put(row)
+  for (const name of [...SYNC_TABLES, 'tombstones']) {
+    if (data[name] !== undefined && (!Array.isArray(data[name]) || data[name].some((r: unknown) => !r || typeof r !== 'object' || Array.isArray(r)))) {
+      throw new Error(`Invalid backup table: ${name}`)
+    }
+  }
+  const markers = (data.tombstones ?? []).map(normalizeTombstone)
+  await db.transaction('rw', [...SYNC_TABLES.map(syncTable), db.tombstones], async () => {
+    if (mode === 'merge') {
+      const incoming: Record<string, unknown> = { ...data, tombstones: markers }
+      for (const name of SYNC_TABLES) {
+        const rows: SyncRow[] = []
+        for (const row of data[name] ?? []) {
+          const restored = { ...row, updatedAt: Date.now() }
+          if (['items', 'parties', 'invoices', 'payments', 'expenses'].includes(name)) {
+            const identity = recordIdentity(name, row)
+            const wasDeleted = await db.tombstones.get(tombstoneKey(name, identity))
+            restored.syncId = wasDeleted ? newSyncId() : identity
+          }
+          rows.push(restored)
         }
+        incoming[name] = name === 'business' && await db.business.count() ? [] : rows
       }
-    },
-  )
-  if (Array.isArray(data.payments)) for (const row of data.payments) await db.payments.put(row)
-  if (Array.isArray(data.expenses)) for (const row of data.expenses) await db.expenses.put(row)
+      await mergeSnapshot(db, JSON.stringify(incoming))
+      return
+    }
+    if (mode === 'replace') {
+      for (const name of SYNC_TABLES) {
+        const restoredIdentities = new Set((data[name] ?? []).map((row: SyncRow) => recordIdentity(name, row)))
+        for (const row of await syncTable(name).toArray()) {
+          if (!restoredIdentities.has(recordIdentity(name, row))) await markDeleted(name, row)
+        }
+        await syncTable(name).clear()
+      }
+    }
+    for (const marker of markers) {
+      const current = await db.tombstones.get(marker.key)
+      if (!current || marker.deletedAt > current.deletedAt) await db.tombstones.put(marker)
+    }
+    for (const name of SYNC_TABLES) {
+      for (const row of data[name] ?? []) {
+        const restored = { ...row, updatedAt: Date.now() }
+        if (['items', 'parties', 'invoices', 'payments', 'expenses'].includes(name)) {
+          const identity = recordIdentity(name, row)
+          const wasDeleted = await db.tombstones.get(tombstoneKey(name, identity))
+          restored.syncId = wasDeleted ? newSyncId() : identity
+        }
+        await syncTable(name).put(restored)
+        // Explicitly recovered rows have a new identity; retain old tombstones for stale devices.
+      }
+    }
+  })
 }
 
 export async function wipeAllData(): Promise<void> {
-  await Promise.all([
-    db.items.clear(),
-    db.parties.clear(),
-    db.invoices.clear(),
-    db.docSettings.clear(),
-    db.appSettings.clear(),
-    db.payments.clear(),
-    db.expenses.clear(),
-    db.business.clear(),
-  ])
-  await setSetting('onboarded', 'no')
+  await db.transaction('rw', [...SYNC_TABLES.map(syncTable), db.tombstones], async () => {
+    for (const name of SYNC_TABLES) {
+      for (const row of await syncTable(name).toArray()) await markDeleted(name, row)
+      await syncTable(name).clear()
+    }
+    await setSetting('onboarded', 'no')
+  })
 }
 
 export { getBusiness }

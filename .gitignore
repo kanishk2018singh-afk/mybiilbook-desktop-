@@ -1,0 +1,6 @@
+/webapp/node_modules/
+/webapp/dist/
+/webapp/preview-build/
+/webapp/smoke/.build/
+/webapp/*.tsbuildinfo
+/webapp/showroom-manager-app.html

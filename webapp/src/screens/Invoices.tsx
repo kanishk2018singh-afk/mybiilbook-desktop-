@@ -93,7 +93,7 @@ export function InvoicesScreen({
   }, [filtered])
 
   return (
-    <div className="flex-1 px-3 pb-24 pt-3">
+    <div className="screen-content flex-1 px-3 pb-24 pt-3">
       <SearchInput value={q} onChange={setQ} placeholder="Bill number, party, mobile…" />
 
       <div className="mt-2">

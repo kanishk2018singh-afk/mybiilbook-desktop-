@@ -203,7 +203,7 @@ export function ReportsScreen({ business }: { business: Business }) {
   const maxMonth = Math.max(1, ...extra.months.map((m) => Math.max(m.sale, m.purchase)))
 
   return (
-    <div className="flex-1 px-3 pb-24 pt-3">
+    <div className="screen-content flex-1 px-3 pb-24 pt-3">
       <ChipRow>
         {(
           [

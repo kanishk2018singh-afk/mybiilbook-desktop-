@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../lib/db'
 import { activeCompany, activeCompanyId, listCompanies } from '../lib/company'
-import { addUser, deleteUser, logout, setUserPin, userCount, type User, type UserRole } from '../lib/auth'
+import { addUser, deleteUser, logout, setUserPin, userCount, currentUser, updateUser, type User, type UserRole } from '../lib/auth'
 import { ConfirmDialog, Sheet, toast } from '../components/ui'
 import { CompanySheet } from '../screens/Auth'
 
@@ -27,6 +27,8 @@ export function AccountCard({ onLogout = defaultLogout }: { onLogout?: () => voi
   const [tick, setTick] = useState(0)
 
   const users = useLiveQuery(() => db.users.toArray(), [tick], [] as User[])
+  const current = useLiveQuery(() => currentUser(), [tick, usersSheet])
+  const canManage = (users?.length ?? 0) === 0 || current?.role === 'OWNER'
   const company = activeCompany()
 
   useEffect(() => {
@@ -88,7 +90,7 @@ export function AccountCard({ onLogout = defaultLogout }: { onLogout?: () => voi
         title="👥 Users"
         subtitle="Owner sab kuch kar sakta hai; staff billing + khata dekhta hai"
         footer={
-          <button className="btn btn-primary btn-block" onClick={() => setAddOpen(true)}>
+          <button disabled={!canManage} className="btn btn-primary btn-block" onClick={() => setAddOpen(true)}>
             ＋ Naya user banayein
           </button>
         }
@@ -109,6 +111,7 @@ export function AccountCard({ onLogout = defaultLogout }: { onLogout?: () => voi
               </div>
               <button
                 className="btn btn-ghost btn-sm"
+                disabled={!canManage}
                 onClick={() => setPinFor(u)}
                 aria-label="PIN badlein"
               >
@@ -116,13 +119,15 @@ export function AccountCard({ onLogout = defaultLogout }: { onLogout?: () => voi
               </button>
               <button
                 className="btn btn-ghost btn-sm"
+                disabled={!canManage}
                 onClick={() => {
-                  void db.users.update(u.id!, { active: !u.active }).then(() => setTick((t) => t + 1))
+                  void updateUser(u.id!, { active: !u.active }).then(() => setTick((t) => t + 1)).catch((e) => toast(e.message, 'error'))
                 }}
               >
                 {u.active ? '⏸' : '▶'}
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDel(u)} aria-label="User hatayein">
+              <button className="btn btn-ghost btn-sm" disabled={!canManage}
+                onClick={() => setConfirmDel(u)} aria-label="User hatayein">
                 🗑
               </button>
             </div>
@@ -161,7 +166,7 @@ export function AccountCard({ onLogout = defaultLogout }: { onLogout?: () => voi
         confirmLabel="Haan, hata dein"
         onCancel={() => setConfirmDel(null)}
         onConfirm={() => {
-          if (confirmDel?.id) void deleteUser(confirmDel.id).then(() => setTick((t) => t + 1))
+          if (confirmDel?.id) void deleteUser(confirmDel.id).then(() => setTick((t) => t + 1)).catch((e) => toast(e.message, 'error'))
           setConfirmDel(null)
         }}
       />
@@ -206,7 +211,7 @@ function AddUserSheet({
       open={open}
       onClose={onClose}
       title="＋ Naya user"
-      subtitle="Naam, role aur 4-6 ank ka PIN"
+      subtitle="Naam, role aur 4-6 ank ka PIN. Pehla user hamesha owner banta hai."
       footer={
         <button className="btn btn-primary btn-block" onClick={save}>
           User banayein
@@ -295,8 +300,10 @@ function PinSheet({
               setErr('PIN 4 se 6 ank ka rakhein')
               return
             }
-            await setUserPin(user.id, pin)
-            onSaved()
+            try {
+              await setUserPin(user.id, pin)
+              onSaved()
+            } catch (e) { setErr(e instanceof Error ? e.message : 'PIN nahi badla') }
           }}
         >
           PIN badlein
