@@ -12,7 +12,7 @@ import { toast } from '../components/ui'
 export function POSScreen({ draft, business, onBack, onEdit, onSaved }: {
   draft: Invoice; business: Business; onBack: () => void; onEdit: (draft: Invoice) => void; onSaved: (id: number) => void
 }) {
-  const [cart, setCart] = useState(draft)
+  const [cart, setCart] = useState(() => ({ ...draft, billDiscountValue: 0 }))
   const [query, setQuery] = useState('')
   const [scanner, setScanner] = useState(false)
   const [party, setParty] = useState(false)
@@ -25,7 +25,7 @@ export function POSScreen({ draft, business, onBack, onEdit, onSaved }: {
   const filtered = items.filter(i => `${i.name} ${i.code} ${i.barcode ?? ''} ${i.brand}`.toLowerCase().includes(query.trim().toLowerCase()))
   const add = (item: Item) => setCart(prev => {
     const existing = prev.items.find(l => l.itemId === item.id)
-    return { ...prev, items: existing ? prev.items.map(l => l === existing ? { ...l, qty: l.qty + 1 } : l) : [...prev.items, lineFromItem(item)] }
+    return { ...prev, items: existing ? prev.items.map(l => l === existing ? { ...l, qty: l.qty + 1 } : l) : [...prev.items, { ...lineFromItem(item), discountPercent: 0 }] }
   })
   const scan = (code: string) => {
     const item = items.find(i => i.barcode === code.trim() || i.code.toLowerCase() === code.trim().toLowerCase())
@@ -61,8 +61,7 @@ export function POSScreen({ draft, business, onBack, onEdit, onSaved }: {
           {filtered.slice(0, 120).map(i => <button key={i.id} className="card flex min-w-0 flex-col gap-2 text-left hover:border-brand-500" onClick={() => add(i)} disabled={saving}>
             <span className="text-2xl" aria-hidden="true">📦</span><span className="break-words text-sm font-bold">{i.name}</span>
             <span className="break-words text-xs text-slate-500">{i.code} • {i.unit}</span>
-            <span className="text-xs text-slate-500">MRP {money(i.mrp)} • Default discount {i.discountPercent}%</span>
-            <span className="mt-auto font-bold text-brand-700">{money(i.mrp * (1 - i.discountPercent / 100))}</span>
+            <span className="mt-auto font-bold text-brand-700">MRP {money(i.mrp)}</span>
             <span className="text-xs text-slate-500">+ {i.gstPercent}% GST • Stock: {i.stockQty}</span>
           </button>)}
         </div>
@@ -88,18 +87,8 @@ export function POSScreen({ draft, business, onBack, onEdit, onSaved }: {
             <button className="btn btn-sm btn-ghost ml-auto" disabled={saving} onClick={() => setCart(p => ({ ...p, items: p.items.filter(l => l.id !== line.id) }))}>Remove</button>
           </div>
         </div>)}
-        <div className="mt-4 rounded-xl bg-slate-50 p-3">
-          <h3 className="text-sm font-bold">Extra bill discount</h3>
-          <p className="my-2 text-xs text-slate-500">Item discount ke baad, GST se pehle apply hoga. Discount hatane ke liye 0 karein.</p>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="field"><span className="label">Discount type</span><select className="select" aria-label="Bill discount type" value={cart.billDiscountType} disabled={saving} onChange={e => setCart(p => ({ ...p, billDiscountType: e.target.value as Invoice['billDiscountType'], billDiscountValue: 0 }))}><option value="PERCENT">Percent (%)</option><option value="AMOUNT">Amount (₹)</option></select></label>
-            <label className="field"><span className="label">Discount {cart.billDiscountType === 'PERCENT' ? '%' : '₹'}</span><DiscountInput key={cart.billDiscountType} label="Bill discount value" max={cart.billDiscountType === 'PERCENT' ? 100 : Number.MAX_SAFE_INTEGER} value={cart.billDiscountValue} disabled={saving} onChange={value => setCart(p => ({ ...p, billDiscountValue: value }))} /></label>
-          </div>
-          {cart.billDiscountType === 'AMOUNT' && cart.billDiscountValue > total.taxable && <p className="mt-2 text-xs text-warn">Discount subtotal tak limited hai: {money(total.billDiscount)}</p>}
-        </div>
         <div className="mt-3 flex justify-between text-sm"><span>Subtotal (before discounts)</span><span>{money(total.gross)}</span></div>
         <div className="mt-2 flex justify-between text-sm"><span>Item discounts</span><span>−{money(total.lineDiscount)}</span></div>
-        <div className="mt-2 flex justify-between text-sm"><span>Extra bill discount</span><span>−{money(total.billDiscount)}</span></div>
         <div className="my-3 flex justify-between text-sm"><span>GST included below</span><span>{money(total.tax)}</span></div>
         <div className="flex justify-between text-xl font-extrabold"><span>Total</span><span>{money(total.grandTotal)}</span></div>
         <label className="my-4 flex items-center gap-2 text-sm"><input type="checkbox" className="h-5 w-5" checked={paid} disabled={saving} onChange={e => setPaid(e.target.checked)} /> Full payment received</label>
@@ -118,7 +107,7 @@ function DiscountInput({ label, value, max = 100, disabled, onChange }: {
   label: string; value: number; max?: number; disabled: boolean; onChange: (value: number) => void
 }) {
   const [text, setText] = useState<string | null>(null)
-  return <input className="input" aria-label={label} type="number" inputMode="decimal" min="0" max={max} step="0.01" value={text ?? value} disabled={disabled} onBlur={() => setText(null)} onChange={e => {
+  return <input className="input" aria-label={label} type="number" inputMode="decimal" min="0" max={max} step="0.01" value={text ?? (value === 0 ? '' : value)} disabled={disabled} onBlur={() => setText(null)} onChange={e => {
     const raw = e.target.value
     const number = Number(raw)
     if (!Number.isFinite(number)) return
